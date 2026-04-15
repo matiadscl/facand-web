@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Facand - Crea tu Maquina de Facturacion</title>
+  <meta name="description" content="Sitio web, anuncios y automatizaciones. Soluciones digitales integrales para escalar tu negocio.">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="icon" href="assets/img/logo.webp" type="image/webp">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="container nav__inner">
+      <a href="/" class="nav__logo">
+        <img src="assets/img/logo.webp" alt="Facand">
+      </a>
+      <div class="nav__links">
+        <a href="/" class="active">Home</a>
+        <a href="planes.html">Planes</a>
+        <a href="portafolio.html">Portafolio</a>
+        <a href="preguntas-frecuentes.html">Preguntas Frecuentes</a>
+      </div>
+      <span class="nav__badge">Un servicio de 5 estrellas. Recomendado por nuestros clientes</span>
+      <button class="nav__hamburger" onclick="document.getElementById('mobileNav').classList.toggle('open'); this.textContent = this.textContent === '\u2715' ? '\u2630' : '\u2715';" aria-label="Menu">&#9776;</button>
+    </div>
+    <div class="nav__mobile" id="mobileNav">
+      <a href="/" onclick="document.getElementById('mobileNav').classList.remove('open')">Home</a>
+      <a href="planes.html">Planes</a>
+      <a href="portafolio.html">Portafolio</a>
+      <a href="preguntas-frecuentes.html">Preguntas Frecuentes</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container hero__inner">
+      <div>
+        <h1>Crea tu maquina de facturacion</h1>
+        <h2>sitio web - anuncios - automatizaciones</h2>
+        <p class="hero__text">Tener "solo" una pagina web ya no es suficiente. Una correcta gestion de anuncios dentro de tu estrategia es fundamental para alcanzar tus objetivos y automatizar los procesos es clave para una experiencia de usuario satisfactoria.</p>
+        <ul class="hero__checklist">
+          <li>Sitio web</li>
+          <li>Integracion de campanas Google ADS y Meta ADS</li>
+          <li>Funnels, Automatizaciones, Informes de campana, Mailing</li>
+          <li>Todo en tu propia sub-cuenta de Go High Level</li>
+        </ul>
+        <a href="planes.html" class="btn btn--primary">Quiero Escalar mi Negocio Hoy</a>
+      </div>
+      <div class="hero__img">
+        <img src="assets/img/hero-illustration.svg" alt="Ilustracion digital">
+      </div>
+    </div>
+  </section>
+
+  <!-- WELCOME -->
+  <section class="section" id="welcome">
+    <div class="container welcome__inner">
+      <div class="welcome__img">
+        <img src="assets/img/brand-impact.webp" alt="Facand - Impacto de marca">
+      </div>
+      <div>
+        <p class="section__label">Bienvenido a Facand, el futuro de la digitalizacion</p>
+        <h2 class="section__title">Haz crecer tu marca con impacto</h2>
+        <ul class="welcome__bullets">
+          <li>Estrategia de marca para destacar en el mercado.</li>
+          <li>Campanas creativas que llaman la atencion</li>
+          <li>Experiencias digitales fluidas que cautivan a la audiencia</li>
+        </ul>
+        <a href="planes.html" class="btn btn--primary">Quiero mas informacion</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUSTED BY -->
+  <section class="section section--center">
+    <div class="container">
+      <h2 class="section__title">Confian en Facand</h2>
+    </div>
+    <div class="carousel">
+      <div class="carousel__track">
+        <img src="assets/img/client-1.webp" alt="Cliente 1">
+        <img src="assets/img/client-2.webp" alt="Cliente 2">
+        <img src="assets/img/client-3.webp" alt="Cliente 3">
+        <img src="assets/img/client-4.webp" alt="Cliente 4">
+        <img src="assets/img/client-5.webp" alt="Cliente 5">
+        <img src="assets/img/client-1.webp" alt="Cliente 1">
+        <img src="assets/img/client-2.webp" alt="Cliente 2">
+        <img src="assets/img/client-3.webp" alt="Cliente 3">
+        <img src="assets/img/client-4.webp" alt="Cliente 4">
+        <img src="assets/img/client-5.webp" alt="Cliente 5">
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section class="section section--center" id="services">
+    <div class="container">
+      <p class="section__label">Lo que ofrecemos</p>
+      <h2 class="section__title">Nuestro Ecosistema de Crecimiento para tu Negocio</h2>
+      <p class="section__desc">Soluciones integrales disenadas con un solo objetivo: aumentar tu facturacion</p>
+
+      <div class="services__grid">
+        <div class="service-card">
+          <img class="service-card__icon" src="assets/img/service-web.webp" alt="Desarrollo Web">
+          <h3>Desarrollo y Arquitectura Web</h3>
+          <p>No hacemos simples "paginas bonitas", construimos activos digitales robustos. Desarrollamos sitios web ultra-rapidos, seguros y escalables. Tu web sera el vendedor mas eficiente de tu equipo, trabajando para ti 24/7 sin fallar.</p>
+        </div>
+        <div class="service-card">
+          <img class="service-card__icon" src="assets/img/service-ecommerce.webp" alt="E-Commerce">
+          <h3>Soluciones E-Commerce</h3>
+          <p>Transforma clics en compradores recurrentes. Disenamos tiendas online optimizadas para maximizar tus ventas, con pasarelas de pago fluidas y una experiencia de usuario sin fricciones. Haz que tu caja registradora virtual nunca se detenga.</p>
+        </div>
+        <div class="service-card">
+          <img class="service-card__icon" src="assets/img/service-seo.webp" alt="SEO y Marketing">
+          <h3>SEO y Marketing Digital</h3>
+          <p>De nada sirve tener el mejor producto si nadie te ve. Posicionamos tu negocio en Google y lanzamos campanas publicitarias hiper-segmentadas que multiplican tu inversion. Atraemos a los clientes que ya estan listos para comprarte.</p>
+        </div>
+        <div class="service-card">
+          <img class="service-card__icon" src="assets/img/service-funnels.webp" alt="Embudos de Venta">
+          <h3>Embudos de Venta</h3>
+          <p>Deja de perder dinero con visitas que rebotan. Disenamos y programamos embudos estrategicos que capturan, nutren y guian a tus prospectos paso a paso hasta la compra final. Automatiza tu captacion de clientes hoy.</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 48px;">
+        <a href="planes.html" class="btn btn--primary">Ver todos los Servicios</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEAM -->
+  <section class="section section--center" id="team">
+    <div class="container">
+      <p class="section__label">Equipo de expertos</p>
+      <h2 class="section__title">Los arquitectos de tu crecimiento digital.</h2>
+      <p class="section__desc">Olvidate de los intermediarios y las agencias tradicionales. Al trabajar con Facand tendras el respaldo de una sociedad de profesionales: analistas programadores y estrategas con experiencia en negocios que traducen lineas de codigo y campanas en ventas reales para tu negocio.</p>
+
+      <div class="team__grid">
+        <div class="team-card">
+          <img class="team-card__img" src="assets/img/team-matias.webp" alt="Matias Hidalgo Venegas">
+          <h3>Matias Hidalgo Venegas</h3>
+          <p class="team-card__role">Ingeniero Comercial</p>
+          <p class="team-card__title">CEO</p>
+        </div>
+        <div class="team-card">
+          <img class="team-card__img" src="assets/img/team-fabian.webp" alt="Fabian Astorga Rubio">
+          <h3>Fabian Astorga Rubio</h3>
+          <p class="team-card__role">Analista Programador</p>
+          <p class="team-card__title">CTO</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <img class="footer__logo" src="assets/img/logo-footer.webp" alt="Facand">
+      <p>FACAND - MARCA REGISTRADA</p>
+      <p>TODOS LOS DERECHOS RESERVADOS</p>
+    </div>
+  </footer>
+
+</body>
+</html>

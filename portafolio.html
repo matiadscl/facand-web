@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portafolio - Facand</title>
+  <meta name="description" content="Sitios web desarrollados por Facand. Conoce nuestro trabajo.">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="icon" href="assets/img/logo.webp" type="image/webp">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="container nav__inner">
+      <a href="/" class="nav__logo">
+        <img src="assets/img/logo.webp" alt="Facand">
+      </a>
+      <div class="nav__links">
+        <a href="/">Home</a>
+        <a href="planes.html">Planes</a>
+        <a href="portafolio.html" class="active">Portafolio</a>
+        <a href="preguntas-frecuentes.html">Preguntas Frecuentes</a>
+      </div>
+      <span class="nav__badge">Un servicio de 5 estrellas. Recomendado por nuestros clientes</span>
+      <button class="nav__hamburger" onclick="document.getElementById('mobileNav').classList.toggle('open'); this.textContent = this.textContent === '\u2715' ? '\u2630' : '\u2715';" aria-label="Menu">&#9776;</button>
+    </div>
+    <div class="nav__mobile" id="mobileNav">
+      <a href="/">Home</a>
+      <a href="planes.html">Planes</a>
+      <a href="portafolio.html" onclick="document.getElementById('mobileNav').classList.remove('open')">Portafolio</a>
+      <a href="preguntas-frecuentes.html">Preguntas Frecuentes</a>
+    </div>
+  </nav>
+
+  <div style="padding-top: 72px;"></div>
+
+  <!-- PORTFOLIO -->
+  <section class="section section--center">
+    <div class="container">
+      <h1 class="section__title">Sitios web desarrollados</h1>
+
+      <div class="portfolio__grid">
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-1.webp" alt="Proyecto 1" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-2.webp" alt="Proyecto 2" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-3.webp" alt="Proyecto 3" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-4.webp" alt="Proyecto 4" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-5.webp" alt="Proyecto 5" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-6.webp" alt="Proyecto 6" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-7.webp" alt="Proyecto 7" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-8.webp" alt="Proyecto 8" loading="lazy">
+        </div>
+        <div class="portfolio__item">
+          <img src="assets/img/portfolio-9.webp" alt="Proyecto 9" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUSTED BY -->
+  <section class="section section--center">
+    <div class="container">
+      <h2 class="section__title">Confian en Facand</h2>
+    </div>
+    <div class="carousel">
+      <div class="carousel__track">
+        <img src="assets/img/client-1.webp" alt="Cliente 1">
+        <img src="assets/img/client-2.webp" alt="Cliente 2">
+        <img src="assets/img/client-3.webp" alt="Cliente 3">
+        <img src="assets/img/client-4.webp" alt="Cliente 4">
+        <img src="assets/img/client-5.webp" alt="Cliente 5">
+        <img src="assets/img/client-1.webp" alt="Cliente 1">
+        <img src="assets/img/client-2.webp" alt="Cliente 2">
+        <img src="assets/img/client-3.webp" alt="Cliente 3">
+        <img src="assets/img/client-4.webp" alt="Cliente 4">
+        <img src="assets/img/client-5.webp" alt="Cliente 5">
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <img class="footer__logo" src="assets/img/logo-footer.webp" alt="Facand">
+      <p>FACAND - MARCA REGISTRADA</p>
+      <p>TODOS LOS DERECHOS RESERVADOS</p>
+    </div>
+  </footer>
+
+</body>
+</html>
