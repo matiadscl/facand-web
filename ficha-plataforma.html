@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma Core - Facand</title>
+  <meta name="description" content="Tu propio panel de control. Login por roles, finanzas, cotizador y reportes automaticos.">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/ficha.css">
+  <link rel="icon" href="assets/img/logo.webp" type="image/webp">
+</head>
+<body>
+  <nav class="nav"><div class="container nav__inner"><a href="/" class="nav__logo"><img src="assets/img/logo.webp" alt="Facand"></a><div class="nav__links"><a href="/">Home</a><a href="planes.html" class="active">Planes</a><a href="portafolio.html">Portafolio</a><a href="preguntas-frecuentes.html">Preguntas Frecuentes</a></div><button class="nav__hamburger" onclick="document.getElementById('mobileNav').classList.toggle('open'); this.textContent = this.textContent === '\u2715' ? '\u2630' : '\u2715';" aria-label="Menu">&#9776;</button></div><div class="nav__mobile" id="mobileNav"><a href="/">Home</a><a href="planes.html">Planes</a><a href="portafolio.html">Portafolio</a><a href="preguntas-frecuentes.html">Preguntas Frecuentes</a></div></nav>
+
+  <section class="ficha-hero">
+    <div class="container ficha-hero__inner">
+      <div>
+        <img class="ficha-hero__icon" src="assets/img/icon-plataforma.svg" alt="">
+        <p class="ficha-hero__category">Transformacion Digital</p>
+        <h1>Plataforma Core</h1>
+        <p class="ficha-hero__tagline">Tu propio panel de control. Login por roles, finanzas, cotizador y reportes automaticos.</p>
+        <p class="ficha-hero__price">Desde $450.000 <span>por proyecto</span></p>
+        <p class="ficha-hero__note">Precio referencial. Cada proyecto se cotiza segun alcance.</p>
+        <a href="#contacto" class="btn btn--primary">Cotizar mi proyecto</a>
+      </div>
+      <div class="ficha-hero__visual">
+        <img src="assets/img/icon-plataforma.svg" alt="Plataforma Core">
+      </div>
+    </div>
+  </section>
+
+  <section class="ficha-features">
+    <div class="container">
+      <p class="section__label">Que incluye</p>
+      <h2 class="section__title">Todo lo que necesitas para digitalizar tu operacion</h2>
+      <div class="ficha-features__grid">
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">1</span>
+          <h3>Panel con login por roles</h3>
+          <p>Cada miembro de tu equipo ve solo lo que necesita. Admin, operador, cliente: permisos diferenciados.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">2</span>
+          <h3>Modulo financiero</h3>
+          <p>Carga de cartolas bancarias, estado de resultados automatico, flujo de caja, punto de equilibrio.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">3</span>
+          <h3>Cotizador de servicios</h3>
+          <p>Genera cotizaciones profesionales con descuentos automaticos y exportacion a PDF.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">4</span>
+          <h3>Reportes automaticos</h3>
+          <p>Dashboards visuales con las metricas que importan. Sin Excel, sin errores manuales.</p>
+        </div>
+      </div>
+      <div class="ficha-ideal">
+        <h3>Ideal para</h3>
+        <ul>
+          <li>Estudios profesionales (abogados, contadores, medicos)</li>
+          <li>Clinicas y centros medicos</li>
+          <li>Empresas de servicios con equipo de 3+ personas</li>
+          <li>Negocios que quieren dejar de depender de Excel</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="ficha-cta" id="contacto">
+    <div class="container">
+      <h2>Listo para digitalizar tu operacion?</h2>
+      <p>Cotizacion sin compromiso en 24 horas.</p>
+      <a href="https://wa.me/56947139891?text=Hola%2C%20quiero%20cotizar%20un%20proyecto%20de%20Plataforma%20Core" class="btn btn--primary" target="_blank">Cotizar mi proyecto</a>
+      <a href="planes.html" class="btn btn--outline">Ver todos los planes</a>
+    </div>
+  </section>
+
+  <footer class="footer"><div class="container"><img class="footer__logo" src="assets/img/logo-footer.webp" alt="Facand"><p>FACAND - MARCA REGISTRADA</p><p>TODOS LOS DERECHOS RESERVADOS</p></div></footer>
+</body>
+</html>

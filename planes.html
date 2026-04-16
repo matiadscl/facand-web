@@ -4,18 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planes y Precios - Facand</title>
-  <meta name="description" content="Planes de sitios web, gestion de anuncios y SaaS GoHighLevel. Sin contratos, cancela cuando quieras.">
+  <meta name="description" content="Sitios web, marketing digital, planes de crecimiento y transformacion digital. Sin contratos, cancela cuando quieras.">
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="icon" href="assets/img/logo.webp" type="image/webp">
+  <style>
+    .pricing-card__icon { width: 48px; height: 48px; margin-bottom: 12px; }
+    .pricing-card__tagline { font-size: 13px; color: var(--text-gray); margin-bottom: 20px; line-height: 1.4; }
+    .pricing-nav { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; padding-top: 88px; }
+    .pricing-nav a { padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; }
+    .pricing-nav a:hover, .pricing-nav a.active { background: var(--primary); color: #000; border-color: var(--primary); }
+    .pricing__grid--4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media (max-width: 1024px) { .pricing__grid--4 { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .pricing__grid--4 { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; } }
+    .td-modules { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 48px; }
+    .td-module { background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius); padding: 32px; transition: all 0.3s; }
+    .td-module:hover { border-color: rgba(65,215,126,0.3); transform: translateY(-4px); }
+    .td-module__icon { width: 48px; height: 48px; margin-bottom: 16px; }
+    .td-module h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .td-module__price { font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+    .td-module p { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+    .td-module .btn { width: 100%; font-size: 14px; padding: 10px 20px; }
+    @media (max-width: 768px) { .td-modules { grid-template-columns: 1fr; } }
+    .cotizar-section { padding: 80px 0; text-align: center; border-top: 1px solid rgba(255,255,255,0.05); background: linear-gradient(180deg, transparent, rgba(65,215,126,0.03)); }
+    .cotizar-section h2 { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+    .cotizar-section p { color: var(--text-muted); font-size: 18px; margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .cotizar-section .btn { font-size: 18px; padding: 16px 40px; }
+  </style>
 </head>
 <body>
 
   <!-- NAV -->
   <nav class="nav">
     <div class="container nav__inner">
-      <a href="/" class="nav__logo">
-        <img src="assets/img/logo.webp" alt="Facand">
-      </a>
+      <a href="/" class="nav__logo"><img src="assets/img/logo.webp" alt="Facand"></a>
       <div class="nav__links">
         <a href="/">Home</a>
         <a href="planes.html" class="active">Planes</a>
@@ -27,187 +48,283 @@
     </div>
     <div class="nav__mobile" id="mobileNav">
       <a href="/">Home</a>
-      <a href="planes.html" onclick="document.getElementById('mobileNav').classList.remove('open')">Planes</a>
+      <a href="planes.html">Planes</a>
       <a href="portafolio.html">Portafolio</a>
       <a href="preguntas-frecuentes.html">Preguntas Frecuentes</a>
     </div>
   </nav>
 
-  <div style="padding-top: 72px;"></div>
+  <!-- Quick Nav -->
+  <div class="pricing-nav">
+    <a href="#sitios-web">Sitios Web</a>
+    <a href="#marketing">Marketing Digital</a>
+    <a href="#crecimiento">Crecimiento</a>
+    <a href="#transformacion">Transformacion Digital</a>
+    <a href="#cotizar">Cotizar Proyecto</a>
+  </div>
 
+  <!-- ============================================ -->
   <!-- SITIOS WEB -->
-  <section class="pricing-section">
+  <!-- ============================================ -->
+  <section class="pricing-section" id="sitios-web">
     <div class="container">
       <div class="pricing-section__header">
-        <p class="section__label">Precios</p>
+        <p class="section__label">Pago unico</p>
         <h1 class="section__title">Sitios Web</h1>
+        <p class="section__desc" style="margin: 0 auto;">Tu activo digital mas importante. Diseno, desarrollo y hosting incluido.</p>
       </div>
 
       <div class="pricing__grid">
-        <!-- Landing Page -->
         <div class="pricing-card">
+          <img class="pricing-card__icon" src="assets/img/icon-landing.svg" alt="">
           <p class="pricing-card__name">Landing Page</p>
-          <p class="pricing-card__price">$149.990</p>
+          <p class="pricing-card__price">$199.990</p>
           <p class="pricing-card__period">pago unico</p>
+          <p class="pricing-card__tagline">Una pagina, un objetivo: convertir.</p>
           <ul class="pricing-card__features">
-            <li><strong>Arquitectura y diseno de landing page:</strong> Propuesta de valor impactante con un diseno fluido y optimizado para todos los dispositivos.</li>
-            <li><strong>Hosting:</strong> Incluido durante 12 meses</li>
-            <li><strong>Configuracion SEO Basica:</strong> Elementos clave como titulos, descripciones, palabras clave y la estructura de las URLs en cada pagina</li>
-            <li><strong>Sitio web autoadministrable:</strong> Realiza los cambios que necesites de forma rapida y sencilla.</li>
+            <li><strong>Diseno de alta conversion</strong> optimizado para todos los dispositivos</li>
+            <li><strong>Hosting + SSL</strong> incluido 12 meses</li>
+            <li><strong>SEO basico</strong> — titulos, descripciones, estructura de URLs</li>
+            <li><strong>Autoadministrable</strong> — cambia textos e imagenes tu mismo</li>
           </ul>
-          <a href="#" class="btn btn--primary">Comprar</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-landing.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Entrega: 7-10 dias habiles</p>
         </div>
 
-        <!-- Sitio Web -->
         <div class="pricing-card">
-          <p class="pricing-card__name">Sitio Web</p>
-          <p class="pricing-card__price">$249.990</p>
+          <img class="pricing-card__icon" src="assets/img/icon-corporativo.svg" alt="">
+          <p class="pricing-card__name">Sitio Corporativo</p>
+          <p class="pricing-card__price">$399.990</p>
           <p class="pricing-card__period">pago unico</p>
+          <p class="pricing-card__tagline">Hasta 5 paginas. Tu negocio presentado como merece.</p>
           <ul class="pricing-card__features">
-            <li><strong>Arquitectura y diseno de sitio web (maximo 5 paginas):</strong> Navegacion intuitiva y minimalista que permite al usuario encontrar informacion relevante de manera rapida y sencilla.</li>
-            <li><strong>Hosting:</strong> Incluido durante 12 meses</li>
-            <li><strong>Configuracion SEO Avanzada:</strong> Arquitectura de enlaces de alta calidad y optimizacion extrema de la velocidad de carga</li>
-            <li><strong>Sitio web autoadministrable:</strong> Realiza los cambios que necesites de forma rapida y sencilla.</li>
+            <li><strong>Hasta 5 paginas</strong> con navegacion intuitiva y minimalista</li>
+            <li><strong>Hosting + SSL</strong> incluido 12 meses</li>
+            <li><strong>SEO avanzado</strong> — enlaces, velocidad, estructura optimizada</li>
+            <li><strong>Autoadministrable</strong> + responsive total</li>
           </ul>
-          <a href="#" class="btn btn--primary">Comprar</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-corporativo.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Entrega: 15-20 dias habiles</p>
         </div>
 
-        <!-- E-Commerce -->
         <div class="pricing-card">
+          <img class="pricing-card__icon" src="assets/img/icon-ecommerce.svg" alt="">
           <p class="pricing-card__name">E-Commerce</p>
-          <p class="pricing-card__price">$499.990</p>
+          <p class="pricing-card__price">$699.990</p>
           <p class="pricing-card__period">pago unico</p>
+          <p class="pricing-card__tagline">Tienda online con pasarela de pago integrada.</p>
           <ul class="pricing-card__features">
-            <li><strong>Arquitectura y diseno E-commerce:</strong> Sitio web enfocado en la venta de productos o servicios</li>
-            <li><strong>Pasarela de pago integrada:</strong> Integra tu negocio con Mercado Pago, Web Pay o la pasarela de pago que elijas.</li>
-            <li><strong>Hosting:</strong> Incluido durante 12 meses</li>
-            <li><strong>Configuracion SEO Avanzada:</strong> Arquitectura de enlaces de alta calidad y optimizacion extrema de la velocidad de carga</li>
-            <li><strong>Sitio web autoadministrable:</strong> Realiza los cambios que necesites de forma rapida y sencilla.</li>
+            <li><strong>Tienda completa</strong> — catalogo, carrito, checkout optimizado</li>
+            <li><strong>Pasarela de pago</strong> — Mercado Pago, WebPay u otra</li>
+            <li><strong>Hosting + SSL + SEO avanzado</strong> incluidos</li>
+            <li><strong>Panel de productos</strong> — gestiona stock, precios y variantes</li>
           </ul>
-          <a href="#" class="btn btn--primary">Comprar</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-ecommerce.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Entrega: 20-30 dias habiles</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- GESTION ANUNCIOS -->
-  <section class="pricing-section">
+  <!-- ============================================ -->
+  <!-- MARKETING DIGITAL -->
+  <!-- ============================================ -->
+  <section class="pricing-section" id="marketing">
     <div class="container">
       <div class="pricing-section__header">
-        <p class="section__label">Precios de suscripciones</p>
-        <h2 class="section__title">Gestion Anuncios</h2>
+        <p class="section__label">Suscripciones mensuales</p>
+        <h2 class="section__title">Marketing Digital</h2>
+        <p class="section__desc" style="margin: 0 auto;">Campanas que convierten. Presupuesto publicitario no incluido.</p>
       </div>
 
-      <div class="pricing__grid">
-        <!-- Meta Ads -->
+      <div class="pricing__grid--4">
         <div class="pricing-card">
+          <img class="pricing-card__icon" src="assets/img/icon-meta.svg" alt="">
           <p class="pricing-card__name">Meta Ads</p>
-          <p class="pricing-card__price">$149.990</p>
+          <p class="pricing-card__price">$179.990</p>
           <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Instagram + Facebook. Llega a quien va a comprar.</p>
           <ul class="pricing-card__features">
-            <li><strong>Segmentacion Avanzada:</strong> Llegamos directamente a tu publico objetivo basado en sus intereses, comportamientos y ubicacion geografica.</li>
-            <li><strong>Diseno de Creativos:</strong> Creacion de anuncios visualmente atractivos para Feed, Stories y Reels que detienen el scroll.</li>
-            <li><strong>Configuracion de Pixel:</strong> Instalacion y configuracion para medir conversiones y retargeting.</li>
-            <li><strong>Gestion de Presupuesto Optimizado:</strong> Maximizamos cada peso invertido para obtener el menor costo por clic o mensaje posible.</li>
+            <li><strong>Segmentacion avanzada</strong> por intereses y comportamiento</li>
+            <li><strong>Creativos profesionales</strong> para Feed, Stories y Reels</li>
+            <li><strong>Pixel + tracking</strong> — retargeting basado en datos</li>
+            <li><strong>Optimizacion de presupuesto</strong> — menor CPC posible</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-meta-ads.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Cancela cuando quieras.</p>
         </div>
 
-        <!-- Google Ads -->
         <div class="pricing-card">
+          <img class="pricing-card__icon" src="assets/img/icon-google.svg" alt="">
           <p class="pricing-card__name">Google Ads</p>
-          <p class="pricing-card__price">$149.990</p>
+          <p class="pricing-card__price">$179.990</p>
           <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Aparece primero cuando te buscan.</p>
           <ul class="pricing-card__features">
-            <li><strong>Aparece en el Top 1 de Google:</strong> Tu negocio estara en los primeros resultados cuando potenciales clientes busquen tus productos o servicios.</li>
-            <li><strong>Seleccion de Palabras Clave:</strong> Analisis exhaustivo de los terminos de busqueda con mayor intencion de compra.</li>
-            <li><strong>Anuncios de Alto Impacto:</strong> Redaccion persuasiva enfocada en beneficios y llamados a la accion claros.</li>
-            <li><strong>Seguimiento de Conversiones:</strong> Reportes detallados sobre cuantas personas llamaron o escribieron tras ver el anuncio.</li>
+            <li><strong>Top de Google</strong> — primeros resultados de busqueda</li>
+            <li><strong>Keywords estrategicas</strong> con intencion de compra</li>
+            <li><strong>Anuncios persuasivos</strong> con CTAs claros</li>
+            <li><strong>Tracking de conversiones</strong> — sabes cuanto vendes</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-google-ads.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Cancela cuando quieras.</p>
         </div>
 
-        <!-- Meta + Google Ads -->
         <div class="pricing-card">
-          <p class="pricing-card__name">Meta + Google Ads</p>
-          <p class="pricing-card__price">$249.990</p>
+          <img class="pricing-card__icon" src="assets/img/icon-fullads.svg" alt="">
+          <p class="pricing-card__name">Full Ads</p>
+          <p class="pricing-card__price">$299.990</p>
           <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Meta + Google juntos. Omnipresencia digital.</p>
           <ul class="pricing-card__features">
-            <li><strong>Omnipresencia Digital:</strong> Tu marca estara presente tanto en redes sociales como en el buscador mas grande del mundo.</li>
-            <li><strong>Sinergia de Datos:</strong> Utilizamos la informacion de ambas plataformas para optimizar el embudo de ventas completo.</li>
-            <li><strong>Remarketing Cruzado:</strong> Si alguien te busca en Google, lo perseguimos con un recordatorio visual en Instagram.</li>
-            <li><strong>Reporte Mensual Unificado:</strong> Analisis comparativo de rendimiento para ver que plataforma te esta trayendo mayor rentabilidad.</li>
+            <li><strong>Ambas plataformas</strong> — redes sociales + buscador</li>
+            <li><strong>Sinergia de datos</strong> — embudo completo optimizado</li>
+            <li><strong>Remarketing cruzado</strong> — ningun lead se pierde</li>
+            <li><strong>Reporte unificado</strong> — una vista, toda la data</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-full-ads.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Cancela cuando quieras.</p>
+        </div>
+
+        <div class="pricing-card">
+          <img class="pricing-card__icon" src="assets/img/icon-seo.svg" alt="">
+          <p class="pricing-card__name">Full Ads + SEO</p>
+          <p class="pricing-card__price">$399.990</p>
+          <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Pagado + organico. La combinacion definitiva.</p>
+          <ul class="pricing-card__features">
+            <li><strong>Todo Full Ads</strong> — Meta + Google + remarketing</li>
+            <li><strong>SEO organico mensual</strong> — contenido, backlinks, velocidad</li>
+            <li><strong>Estrategia de contenido</strong> — posiciona en busquedas clave</li>
+            <li><strong>Reporte integral</strong> — pagado + organico en uno</li>
+          </ul>
+          <a href="ficha-full-ads-seo.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Cancela cuando quieras.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- PLANES SAAS -->
-  <section class="pricing-section">
+  <!-- ============================================ -->
+  <!-- PLANES DE CRECIMIENTO -->
+  <!-- ============================================ -->
+  <section class="pricing-section" id="crecimiento">
     <div class="container">
       <div class="pricing-section__header">
-        <p class="section__label">Precios de suscripciones</p>
-        <h2 class="section__title">Planes SaaS (en Go High Level)</h2>
+        <p class="section__label">Suscripciones mensuales</p>
+        <h2 class="section__title">Planes de Crecimiento</h2>
+        <p class="section__desc" style="margin: 0 auto;">Delega tu operacion digital completa. Nosotros ejecutamos, tu facturas.</p>
       </div>
 
       <div class="pricing__grid">
-        <!-- Plan Start -->
         <div class="pricing-card">
-          <p class="pricing-card__name">Plan Start</p>
-          <p class="pricing-card__price">$35.900</p>
-          <p class="pricing-card__period">/mes - Tu Motor de Ventas</p>
+          <img class="pricing-card__icon" src="assets/img/icon-starter.svg" alt="">
+          <p class="pricing-card__name">Starter</p>
+          <p class="pricing-card__price">$99.990</p>
+          <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Tu sitio siempre funcionando. Soporte incluido.</p>
           <ul class="pricing-card__features">
-            <li><strong>Sub-Cuenta Go High Level:</strong> Acceso a sub cuenta de Go High Level para 3 usuarios</li>
-            <li><strong>Constructor de sitios web y funnel:</strong> Crea paginas web y embudos de venta ilimitados con tecnologia de carga ultra rapida.</li>
-            <li><strong>Gestion de Resenas:</strong> Mejora tu reputacion en Google y Meta enviando solicitudes automaticamente.</li>
-            <li><strong>Acompanamiento inicial:</strong> Reunion de capacitacion de una hora para mostrar modulos de Go High Level</li>
-            <li class="no-include"><strong>No Incluye:</strong> configuracion inicial de sitios web, automatizaciones, agentes de IA ni alguna funcionalidad de la plataforma.</li>
+            <li><strong>Mantenimiento web continuo</strong> — actualizado y seguro</li>
+            <li><strong>Hosting + SSL</strong> incluido permanente</li>
+            <li><strong>Soporte tecnico</strong> — respuesta en menos de 24h</li>
+            <li><strong>2 cambios menores/mes</strong> — textos, imagenes, ajustes</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-starter.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Cancela cuando quieras.</p>
         </div>
 
-        <!-- Plan Growth -->
         <div class="pricing-card">
-          <p class="pricing-card__name">Plan Growth</p>
-          <p class="pricing-card__price">$349.900</p>
-          <p class="pricing-card__period">/mes - Inicia el Crecimiento</p>
+          <img class="pricing-card__icon" src="assets/img/icon-growth.svg" alt="">
+          <p class="pricing-card__name">Growth</p>
+          <p class="pricing-card__price">$349.990</p>
+          <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Mantenimiento + marketing en uno. Tu negocio crece solo.</p>
           <ul class="pricing-card__features">
-            <li><strong>Todo lo del Plan Start</strong> (con Acceso Full a GHL).</li>
-            <li><strong>Gestion de Ads (Google & Meta):</strong> Creacion, optimizacion y seguimiento de tus campanas para atraer leads calificados.</li>
-            <li><strong>Diseno de 1 Funnel de Conversion:</strong> Disenamos tu embudo de ventas profesional enfocado en la conversion.</li>
-            <li><strong>Automatizacion de Leads Avanzada:</strong> Sistema "Missed Call Text Back" y secuencias de email de bienvenida.</li>
-            <li><strong>Asistente de IA Basico:</strong> Respuestas automaticas para las preguntas mas frecuentes (FAQ).</li>
-            <li><strong>Reporte Mensual de ROI:</strong> Analisis claro de inversion y resultados.</li>
+            <li><strong>Todo Starter</strong> — mantenimiento, hosting, soporte</li>
+            <li><strong>Ads en 1 plataforma</strong> — Google o Meta con optimizacion</li>
+            <li><strong>Automatizacion de leads</strong> — emails, formularios, secuencias</li>
+            <li><strong>Reportes mensuales</strong> — inversion, leads, costo por cliente</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-growth.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Presupuesto ads no incluido.</p>
         </div>
 
-        <!-- Plan Elite -->
         <div class="pricing-card">
-          <p class="pricing-card__name">Plan Elite</p>
-          <p class="pricing-card__price">$749.900</p>
-          <p class="pricing-card__period">/mes - Partner Digital 360</p>
+          <img class="pricing-card__icon" src="assets/img/icon-scale.svg" alt="">
+          <p class="pricing-card__name">Scale</p>
+          <p class="pricing-card__price">$749.990</p>
+          <p class="pricing-card__period">/mes</p>
+          <p class="pricing-card__tagline">Partner digital 360. IA, dashboard y estrategia semanal.</p>
           <ul class="pricing-card__features">
-            <li><strong>Acceso VIP a Plataforma:</strong> Soporte prioritario y configuracion ilimitada de usuarios.</li>
-            <li><strong>Estrategia Omnicanal:</strong> Campanas en Google Search, YouTube, Instagram y Facebook Ads con Retargeting avanzado.</li>
-            <li><strong>Automatizacion con IA Avanzada:</strong> Entrenamiento de un agente de IA que califica y agenda citas 24/7.</li>
-            <li><strong>Sitio Web Corporativo o E-commerce:</strong> Desarrollo y mantenimiento completo, perfil de acceso a clientes y usuarios.</li>
-            <li><strong>Workflows Personalizados:</strong> Integracion de GoHighLevel con tus sistemas internos (ERP, etc.).</li>
+            <li><strong>Todo Growth</strong> + ads omnicanal (Google + Meta)</li>
+            <li><strong>Dashboard personalizado</strong> — panel de control a medida</li>
+            <li><strong>Agente IA</strong> — bot que atiende y califica leads 24/7</li>
+            <li><strong>Automatizaciones avanzadas</strong> + workflows personalizados</li>
+            <li><strong>Reunion estrategica semanal</strong> con nuestro equipo</li>
           </ul>
-          <a href="#" class="btn btn--primary">Suscribirme</a>
-          <p class="pricing-card__note">Sin contratos, puedes dar de baja cuando quieras</p>
+          <a href="ficha-scale.html" class="btn btn--primary">Ver detalle</a>
+          <p class="pricing-card__note">Sin contratos. Presupuesto ads no incluido.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============================================ -->
+  <!-- TRANSFORMACION DIGITAL -->
+  <!-- ============================================ -->
+  <section class="pricing-section" id="transformacion">
+    <div class="container">
+      <div class="pricing-section__header">
+        <p class="section__label">Proyectos a medida</p>
+        <h2 class="section__title">Transformacion Digital</h2>
+        <p class="section__desc" style="margin: 0 auto;">Modulos que se adaptan a tu negocio. Combina los que necesites o cotiza un proyecto completo.</p>
+      </div>
+
+      <div class="td-modules">
+        <div class="td-module">
+          <img class="td-module__icon" src="assets/img/icon-plataforma.svg" alt="">
+          <h3>Plataforma Core</h3>
+          <p class="td-module__price">Desde $450.000</p>
+          <p>Panel con login por roles, modulo financiero, cotizador de servicios y reportes automaticos. Tu centro de operaciones digital.</p>
+          <a href="ficha-plataforma.html" class="btn btn--outline">Ver detalle</a>
+        </div>
+
+        <div class="td-module">
+          <img class="td-module__icon" src="assets/img/icon-crm.svg" alt="">
+          <h3>CRM + Automatizaciones</h3>
+          <p class="td-module__price">Desde $500.000</p>
+          <p>Embudos de venta, nurturing automatico, gestion de resenas y trazabilidad completa de cada lead que toca tu negocio.</p>
+          <a href="ficha-crm.html" class="btn btn--outline">Ver detalle</a>
+        </div>
+
+        <div class="td-module">
+          <img class="td-module__icon" src="assets/img/icon-portal.svg" alt="">
+          <h3>Portal de Clientes</h3>
+          <p class="td-module__price">Desde $650.000</p>
+          <p>Tus clientes ven el estado de su servicio en tiempo real. Login propio, notificaciones y documentos compartidos.</p>
+          <a href="ficha-portal.html" class="btn btn--outline">Ver detalle</a>
+        </div>
+
+        <div class="td-module">
+          <img class="td-module__icon" src="assets/img/icon-ia.svg" alt="">
+          <h3>IA + Integraciones</h3>
+          <p class="td-module__price">Desde $400.000</p>
+          <p>Bot conversacional, agente de IA que califica y agenda, integraciones con Gmail, Calendar, ERP y mas.</p>
+          <a href="ficha-ia.html" class="btn btn--outline">Ver detalle</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ -->
+  <!-- COTIZAR PROYECTO -->
+  <!-- ============================================ -->
+  <section class="cotizar-section" id="cotizar">
+    <div class="container">
+      <img src="assets/img/icon-cotizar.svg" alt="" style="width: 80px; margin: 0 auto 24px;">
+      <h2>Tienes un proyecto en mente?</h2>
+      <p>Cuentanos que necesitas y te armamos una propuesta a medida. Sin compromisos.</p>
+      <a href="https://wa.me/56947139891?text=Hola%2C%20quiero%20cotizar%20un%20proyecto%20personalizado%20para%20mi%20negocio" class="btn btn--primary" target="_blank">Cotizar mi proyecto</a>
     </div>
   </section>
 

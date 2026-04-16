@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Landing Page - Facand</title>
+  <meta name="description" content="Tu primera impresion digital. Landing page optimizada, responsive y con SEO basico incluido.">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/ficha.css">
+  <link rel="icon" href="assets/img/logo.webp" type="image/webp">
+</head>
+<body>
+  <nav class="nav"><div class="container nav__inner"><a href="/" class="nav__logo"><img src="assets/img/logo.webp" alt="Facand"></a><div class="nav__links"><a href="/">Home</a><a href="planes.html" class="active">Planes</a><a href="portafolio.html">Portafolio</a><a href="preguntas-frecuentes.html">Preguntas Frecuentes</a></div><button class="nav__hamburger" onclick="document.getElementById('mobileNav').classList.toggle('open'); this.textContent = this.textContent === '\u2715' ? '\u2630' : '\u2715';" aria-label="Menu">&#9776;</button></div><div class="nav__mobile" id="mobileNav"><a href="/">Home</a><a href="planes.html">Planes</a><a href="portafolio.html">Portafolio</a><a href="preguntas-frecuentes.html">Preguntas Frecuentes</a></div></nav>
+
+  <section class="ficha-hero">
+    <div class="container ficha-hero__inner">
+      <div>
+        <img class="ficha-hero__icon" src="assets/img/icon-landing.svg" alt="">
+        <p class="ficha-hero__category">Sitios Web</p>
+        <h1>Landing Page</h1>
+        <p class="ficha-hero__tagline">Tu primera impresion digital. Una sola pagina, un solo objetivo: convertir visitantes en clientes.</p>
+        <p class="ficha-hero__price">$199.990 <span>pago unico</span></p>
+        <p class="ficha-hero__note">Hosting incluido por 12 meses. Sin contratos.</p>
+        <a href="#contacto" class="btn btn--primary">Quiero mi Landing Page</a>
+      </div>
+      <div class="ficha-hero__visual">
+        <img src="assets/img/icon-landing.svg" alt="Landing Page">
+      </div>
+    </div>
+  </section>
+
+  <section class="ficha-features">
+    <div class="container">
+      <p class="section__label">Que incluye</p>
+      <h2 class="section__title">Todo lo que necesitas para captar clientes desde el dia uno</h2>
+      <div class="ficha-features__grid">
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">1</span>
+          <h3>Diseno estrategico de alta conversion</h3>
+          <p>Propuesta de valor impactante con diseno fluido, optimizado para todos los dispositivos. No es una pagina bonita: es una maquina de captar leads.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">2</span>
+          <h3>Hosting incluido 12 meses</h3>
+          <p>Tu landing publicada y funcionando desde el primer dia. Hosting rapido, SSL incluido, sin preocupaciones tecnicas durante un ano completo.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">3</span>
+          <h3>Configuracion SEO basica</h3>
+          <p>Titulos, descripciones, palabras clave y estructura de URLs optimizada para que Google te encuentre desde el inicio.</p>
+        </div>
+        <div class="ficha-feature">
+          <span class="ficha-feature__number">4</span>
+          <h3>Sitio autoadministrable</h3>
+          <p>Realiza cambios de texto, imagenes y contenido de forma rapida y sencilla. Sin depender de nadie para actualizar tu pagina.</p>
+        </div>
+      </div>
+      <div class="ficha-ideal">
+        <h3>Ideal para</h3>
+        <ul>
+          <li>Negocios nuevos que necesitan presencia web rapida</li>
+          <li>Campanas de Google Ads o Meta Ads que necesitan una pagina de destino</li>
+          <li>Profesionales independientes: abogados, medicos, consultores</li>
+          <li>Lanzamientos de productos o servicios puntuales</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="ficha-cta" id="contacto">
+    <div class="container">
+      <h2>Listo para convertir visitantes en clientes?</h2>
+      <p>Entrega estimada: 7 a 10 dias habiles.</p>
+      <a href="https://wa.me/56947139891?text=Hola%2C%20me%20interesa%20el%20plan%20Landing%20Page" class="btn btn--primary" target="_blank">Contratar ahora</a>
+      <a href="planes.html" class="btn btn--outline">Ver todos los planes</a>
+    </div>
+  </section>
+
+  <footer class="footer"><div class="container"><img class="footer__logo" src="assets/img/logo-footer.webp" alt="Facand"><p>FACAND - MARCA REGISTRADA</p><p>TODOS LOS DERECHOS RESERVADOS</p></div></footer>
+</body>
+</html>
