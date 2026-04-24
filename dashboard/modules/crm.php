@@ -1,219 +1,232 @@
 <?php
 /**
- * Módulo CRM — Gestión de clientes y pipeline de ventas
- * Entidad central: todo el sistema se vincula a clientes
+ * Módulo CRM — Gestión completa de clientes
  */
 
 $clientes = query_all('SELECT c.*, e.nombre as responsable_nombre,
-    (SELECT COUNT(*) FROM proyectos WHERE cliente_id = c.id AND estado = "activo") as proyectos_activos,
-    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes,
-    (SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE cliente_id = c.id AND estado IN ("pendiente","parcial")) as deuda_pendiente
-    FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.updated_at DESC');
+    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes
+    FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.nombre');
 
-// Lista de equipo para selector de responsable
 $equipo_list = query_all('SELECT id, nombre FROM equipo WHERE activo = 1 ORDER BY nombre');
 
-// Datos para pipeline — etapas de agencia
-$pipeline_stages = [
-    'lead'            => 'Lead',
-    'contactado'      => 'Contactado',
-    'propuesta'       => 'Propuesta',
-    'negociacion'     => 'Negociación',
-    'onboarding'      => 'Onboarding',
-    'activo'          => 'Activo',
-    'cerrado_perdido' => 'Cerrado Perdido',
+$activos  = count(array_filter($clientes, fn($c) => $c['tipo'] === 'activo'));
+$fee_total = array_sum(array_map(fn($c) => $c['tipo'] === 'activo' && $c['estado_pago'] !== 'canje' ? $c['fee_mensual'] : 0, $clientes));
+$vencidos = count(array_filter($clientes, fn($c) => $c['estado_pago'] === 'vencido'));
+
+$planes_labels = [
+    'growth' => 'Growth', 'scale' => 'Scale', 'starter' => 'Starter',
+    'meta_ads' => 'Meta Ads', 'google_ads' => 'Google Ads',
+    'full_ads' => 'Full Ads', 'full_ads_seo' => 'Full Ads + SEO',
 ];
-
-$pipeline_data = [];
-foreach ($pipeline_stages as $key => $label) {
-    $pipeline_data[$key] = query_all('SELECT * FROM clientes WHERE etapa_pipeline = ? ORDER BY updated_at DESC', [$key]);
-}
-
-// KPIs CRM
-$total = count($clientes);
-$activos = count(array_filter($clientes, fn($c) => $c['tipo'] === 'activo'));
-$prospectos = count(array_filter($clientes, fn($c) => $c['tipo'] === 'prospecto'));
-$deuda_total = array_sum(array_column($clientes, 'deuda_pendiente'));
 ?>
 
-<!-- KPIs -->
-<div class="kpi-grid">
-    <div class="kpi-card">
-        <div class="kpi-label">Total Clientes</div>
-        <div class="kpi-value"><?= $total ?></div>
+<div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="kpi-card" style="border-left:3px solid var(--accent)">
+        <div class="kpi-label">Clientes Activos</div>
+        <div class="kpi-value"><?= $activos ?></div>
+        <div class="kpi-sub">de <?= count($clientes) ?> totales</div>
     </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Activos</div>
-        <div class="kpi-value success"><?= $activos ?></div>
+    <div class="kpi-card" style="border-left:3px solid var(--success)">
+        <div class="kpi-label">Fee Mensual Total</div>
+        <div class="kpi-value success"><?= format_money($fee_total) ?></div>
     </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Prospectos</div>
-        <div class="kpi-value"><?= $prospectos ?></div>
+    <div class="kpi-card" style="border-left:3px solid <?= $vencidos > 0 ? 'var(--danger)' : 'var(--success)' ?>">
+        <div class="kpi-label">Pagos Vencidos</div>
+        <div class="kpi-value <?= $vencidos > 0 ? 'danger' : '' ?>"><?= $vencidos ?></div>
     </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Deuda Total Clientes</div>
-        <div class="kpi-value <?= $deuda_total > 0 ? 'warning' : '' ?>"><?= format_money($deuda_total) ?></div>
-    </div>
-</div>
-
-<!-- Tabs: Pipeline / Lista -->
-<div class="tabs">
-    <button class="tab active" data-tab="pipeline">Pipeline</button>
-    <button class="tab" data-tab="lista">Lista Completa</button>
-</div>
-
-<!-- Pipeline View -->
-<div class="tab-content active" data-tab-content="pipeline">
-    <div class="pipeline">
-        <?php foreach ($pipeline_stages as $key => $label): ?>
-            <div class="pipeline-stage">
-                <div class="pipeline-stage-header">
-                    <span class="pipeline-stage-name"><?= $label ?></span>
-                    <span class="pipeline-stage-count"><?= count($pipeline_data[$key]) ?></span>
-                </div>
-                <?php foreach ($pipeline_data[$key] as $cli): ?>
-                    <div class="pipeline-card" onclick="openClientDetail(<?= $cli['id'] ?>)">
-                        <div class="pipeline-card-name"><?= safe($cli['nombre']) ?></div>
-                        <div class="pipeline-card-sub"><?= safe($cli['plan'] ?: ($cli['contacto_nombre'] ?: $cli['email'])) ?></div>
-                        <?php if ($cli['estado_pago'] === 'vencido'): ?>
-                            <span class="badge" style="background:var(--danger);color:#fff;font-size:.65rem;margin-top:4px;">Pago vencido</span>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-                <?php if (empty($pipeline_data[$key])): ?>
-                    <div style="font-size:.75rem; color:var(--text-muted); text-align:center; padding:20px 0;">Sin clientes</div>
-                <?php endif; ?>
-            </div>
-        <?php endforeach; ?>
+    <div class="kpi-card" style="border-left:3px solid var(--text-muted)">
+        <div class="kpi-label">Tareas Abiertas</div>
+        <div class="kpi-value"><?= array_sum(array_column($clientes, 'tareas_pendientes')) ?></div>
     </div>
 </div>
 
-<!-- Lista View -->
-<div class="tab-content" data-tab-content="lista">
-    <div class="table-container">
-        <div class="table-header">
-            <span class="table-title">Clientes</span>
+<div class="table-container">
+    <div class="table-header">
+        <span class="table-title">Clientes</span>
+        <div class="table-actions">
+            <select class="form-select" style="font-size:.8rem;padding:5px 10px;" onchange="filterCRM(this.value)" id="filterEstado">
+                <option value="">Todos</option>
+                <option value="activo">Activos</option>
+                <option value="inactivo">Inactivos</option>
+                <option value="prospecto">Prospectos</option>
+            </select>
             <?php if (can_edit($current_user['id'], 'crm')): ?>
                 <button class="btn btn-primary btn-sm" onclick="openNewClient()">+ Nuevo Cliente</button>
             <?php endif; ?>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Nombre</th>
-                    <th>Plan</th>
-                    <th>Fee Mensual</th>
-                    <th>Etapa</th>
-                    <th>Estado Pago</th>
-                    <th>Responsable</th>
-                    <th>Tareas</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($clientes as $c): ?>
-                <tr>
-                    <td><strong><?= safe($c['nombre']) ?></strong><br><span style="font-size:.75rem;color:var(--text-muted)"><?= safe($c['rubro']) ?></span></td>
-                    <td><?= safe($c['plan'] ?: '-') ?></td>
-                    <td><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) : '-' ?></td>
-                    <td><span class="badge"><?= safe($c['etapa'] ?: $c['etapa_pipeline']) ?></span></td>
-                    <td><span class="badge <?= $c['estado_pago'] === 'pagado' ? 'status-success' : ($c['estado_pago'] === 'vencido' ? 'status-danger' : 'status-warning') ?>"><?= safe(ucfirst($c['estado_pago'])) ?></span></td>
-                    <td><?= safe($c['responsable_nombre'] ?? '-') ?></td>
-                    <td><?= $c['tareas_pendientes'] ?></td>
-                    <td>
-                        <button class="btn btn-secondary btn-sm" onclick="openClientDetail(<?= $c['id'] ?>)">Ver</button>
-                        <?php if (can_edit($current_user['id'], 'crm')): ?>
-                            <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)">Editar</button>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                <?php if (empty($clientes)): ?>
-                <tr><td colspan="8" class="empty-state">No hay clientes registrados</td></tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
     </div>
+    <table id="tablaClientes">
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Plan</th>
+                <th>Fee Mensual</th>
+                <th>Etapa</th>
+                <th>Pago</th>
+                <th>Servicios</th>
+                <th>Responsable</th>
+                <th style="text-align:right">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($clientes as $c): ?>
+            <tr data-tipo="<?= safe($c['tipo']) ?>">
+                <td>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;border-radius:8px;background:rgba(249,115,22,.12);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:.85rem;flex-shrink:0;"><?= strtoupper(mb_substr($c['nombre'], 0, 2)) ?></div>
+                        <div>
+                            <strong style="font-size:.9rem;"><?= safe($c['nombre']) ?></strong>
+                            <div style="font-size:.72rem;color:var(--text-muted);"><?= safe($c['rubro'] ?: '-') ?></div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <?php if ($c['plan']): ?>
+                        <span class="badge status-info"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
+                    <?php else: ?>
+                        <span style="color:var(--text-muted);font-size:.8rem">Custom</span>
+                    <?php endif; ?>
+                </td>
+                <td style="font-weight:600;<?= $c['fee_mensual'] > 0 ? 'color:var(--success)' : '' ?>"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) : '-' ?></td>
+                <td><span style="font-size:.78rem;"><?= safe($c['etapa'] ?: '-') ?></span></td>
+                <td>
+                    <span class="badge <?= $c['estado_pago'] === 'pagado' ? 'status-success' : ($c['estado_pago'] === 'vencido' ? 'status-danger' : ($c['estado_pago'] === 'canje' ? 'status-muted' : 'status-warning')) ?>"><?= ucfirst($c['estado_pago']) ?></span>
+                </td>
+                <td>
+                    <?php
+                    $svcs = array_filter(array_map('trim', explode(',', $c['servicios'])));
+                    $shown = array_slice($svcs, 0, 2);
+                    $rest = count($svcs) - 2;
+                    foreach ($shown as $s): ?>
+                        <span style="display:inline-block;font-size:.68rem;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid var(--border);margin:1px 2px;"><?= safe($s) ?></span>
+                    <?php endforeach;
+                    if ($rest > 0): ?>
+                        <span style="font-size:.68rem;color:var(--accent);">+<?= $rest ?></span>
+                    <?php endif; ?>
+                </td>
+                <td style="font-size:.82rem;"><?= safe($c['responsable_nombre'] ?? '-') ?></td>
+                <td style="text-align:right;white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="openClientDetail(<?= $c['id'] ?>)" title="Ver ficha completa">Ver</button>
+                    <?php if (can_edit($current_user['id'], 'crm')): ?>
+                        <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)" title="Editar">Editar</button>
+                    <?php endif; ?>
+                    <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Ficha PDF">PDF</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Documento de servicio">Servicio</button>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
 </div>
 
 <script>
-/** Abre formulario para nuevo cliente */
 const crmEquipoList = <?= json_encode(array_column($equipo_list, 'nombre', 'id')) ?>;
+const planesOptions = {'':'Sin plan','growth':'Growth','scale':'Scale','starter':'Starter','meta_ads':'Meta Ads','google_ads':'Google Ads','full_ads':'Full Ads','full_ads_seo':'Full Ads + SEO','custom':'Custom'};
+
+function filterCRM(tipo) {
+    document.querySelectorAll('#tablaClientes tbody tr').forEach(tr => {
+        tr.style.display = (!tipo || tr.dataset.tipo === tipo) ? '' : 'none';
+    });
+}
 
 function openNewClient() {
     const body = `<form id="frmClient" class="form-grid">
         ${formField('nombre', 'Nombre / Razón Social', 'text', '', {required: true})}
-        ${formField('rut', 'RUT', 'text')}
         ${formField('rubro', 'Rubro', 'text')}
+        ${formField('contacto_nombre', 'Contacto Principal', 'text')}
         ${formField('email', 'Email', 'email')}
         ${formField('telefono', 'Teléfono', 'text')}
-        ${formField('contacto_nombre', 'Nombre Contacto', 'text')}
-        ${formField('contacto_cargo', 'Cargo Contacto', 'text')}
-        ${formField('tipo', 'Tipo', 'select', 'prospecto', {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo'}})}
-        ${formField('etapa_pipeline', 'Etapa Pipeline', 'select', 'lead', {options: {lead:'Lead', contactado:'Contactado', propuesta:'Propuesta', negociacion:'Negociación', onboarding:'Onboarding', activo:'Activo', cerrado_perdido:'Cerrado Perdido'}})}
-        ${formField('plan', 'Plan', 'select', '', {options: {'':'Sin plan', basico:'Básico', estandar:'Estándar', premium:'Premium', custom:'Custom'}})}
+        ${formField('plan', 'Plan', 'select', '', {options: planesOptions})}
         ${formField('fee_mensual', 'Fee Mensual ($)', 'number')}
-        ${formField('servicios', 'Servicios', 'text', '', {fullWidth: true})}
+        ${formField('estado_pago', 'Estado Pago', 'select', 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
+        ${formField('tipo', 'Tipo', 'select', 'activo', {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo'}})}
+        ${formField('responsable_id', 'Responsable', 'select', '', {options: {'':'Sin asignar', ...crmEquipoList}})}
+        ${formField('servicios', 'Servicios contratados', 'textarea', '', {fullWidth: true})}
         ${formField('herramientas', 'Herramientas', 'text', '', {fullWidth: true})}
         ${formField('presupuesto_ads', 'Presupuesto Ads', 'text')}
-        ${formField('etapa', 'Etapa Actual', 'text')}
-        ${formField('estado_pago', 'Estado Pago', 'select', 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
-        ${formField('responsable_id', 'Responsable', 'select', '', {options: {'':'Sin asignar', ...crmEquipoList}})}
+        ${formField('etapa', 'Etapa operativa', 'text')}
         ${formField('url_dashboard', 'URL Dashboard', 'text')}
-        ${formField('direccion', 'Dirección', 'text', '', {fullWidth: true})}
         ${formField('notas', 'Notas', 'textarea', '', {fullWidth: true})}
     </form>`;
-    const footer = `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveClient()">Guardar</button>`;
-    Modal.open('Nuevo Cliente', body, footer);
+    Modal.open('Nuevo Cliente', body, `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button><button class="btn btn-primary" onclick="saveClient()">Guardar</button>`);
 }
 
-/** Guarda nuevo cliente via API */
 async function saveClient() {
     const data = getFormData('frmClient');
+    if (!data.nombre) { toast('El nombre es obligatorio', 'error'); return; }
     const res = await API.post('create_client', data);
-    if (res) {
-        toast('Cliente creado correctamente');
-        refreshPage();
-    }
+    if (res) { toast('Cliente creado'); refreshPage(); }
 }
 
-/** Abre detalle de un cliente */
 async function openClientDetail(id) {
     const res = await API.get('get_client', { id });
     if (!res) return;
     const c = res.data;
-    const estadoPagoBadge = c.estado_pago === 'pagado' ? 'status-success' : (c.estado_pago === 'vencido' ? 'status-danger' : 'status-warning');
+    const ep = c.estado_pago === 'pagado' ? 'status-success' : (c.estado_pago === 'vencido' ? 'status-danger' : (c.estado_pago === 'canje' ? 'status-muted' : 'status-warning'));
+
+    let serviciosHtml = '-';
+    if (c.servicios) {
+        serviciosHtml = c.servicios.split(',').map(s => s.trim()).filter(s => s).map(s =>
+            `<span style="display:inline-block;font-size:.78rem;padding:3px 8px;border-radius:4px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);margin:2px;">${escHtml(s)}</span>`
+        ).join('');
+    }
+
+    let herrHtml = '-';
+    if (c.herramientas) {
+        herrHtml = c.herramientas.split(',').map(s => s.trim()).filter(s => s).map(s =>
+            `<span style="display:inline-block;font-size:.78rem;padding:3px 8px;border-radius:4px;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.2);margin:2px;">${escHtml(s)}</span>`
+        ).join('');
+    }
+
     const body = `
-        <div style="display:grid; gap:12px;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                <div><strong>Tipo:</strong> <span class="badge ${status_class(c.tipo)}">${c.tipo}</span></div>
-                <div><strong>Estado Pago:</strong> <span class="badge ${estadoPagoBadge}">${escHtml(c.estado_pago || '-')}</span></div>
-                <div><strong>Plan:</strong> ${escHtml(c.plan || '-')}</div>
-                <div><strong>Fee Mensual:</strong> ${c.fee_mensual ? fmtMoney(c.fee_mensual) : '-'}</div>
-                <div><strong>Rubro:</strong> ${escHtml(c.rubro || '-')}</div>
-                <div><strong>Etapa:</strong> ${escHtml(c.etapa || c.etapa_pipeline || '-')}</div>
+    <div style="display:grid;gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div style="background:var(--bg);padding:12px;border-radius:8px;">
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Plan</div>
+                <div style="font-size:1rem;font-weight:600;margin-top:2px;">${escHtml(c.plan || 'Custom')}</div>
             </div>
-            <hr style="border-color:var(--border)">
-            <div><strong>Servicios:</strong> ${escHtml(c.servicios || '-')}</div>
-            <div><strong>Herramientas:</strong> ${escHtml(c.herramientas || '-')}</div>
-            <div><strong>Presupuesto Ads:</strong> ${escHtml(c.presupuesto_ads || '-')}</div>
-            ${c.url_dashboard ? '<div><strong>Dashboard:</strong> <a href="' + escHtml(c.url_dashboard) + '" target="_blank">' + escHtml(c.url_dashboard) + '</a></div>' : ''}
-            <hr style="border-color:var(--border)">
-            <div><strong>RUT:</strong> ${escHtml(c.rut || '-')}</div>
-            <div><strong>Email:</strong> ${escHtml(c.email || '-')}</div>
-            <div><strong>Teléfono:</strong> ${escHtml(c.telefono || '-')}</div>
-            <div><strong>Contacto:</strong> ${escHtml(c.contacto_nombre || '-')} ${c.contacto_cargo ? '(' + escHtml(c.contacto_cargo) + ')' : ''}</div>
-            <hr style="border-color:var(--border)">
-            <div><strong>Proyectos activos:</strong> ${c.proyectos_activos}</div>
-            <div><strong>Tareas pendientes:</strong> ${c.tareas_pendientes}</div>
-            <div><strong>Deuda pendiente:</strong> ${fmtMoney(c.deuda_pendiente)}</div>
-            ${c.notas ? '<div><strong>Notas:</strong><br>' + escHtml(c.notas) + '</div>' : ''}
-        </div>`;
-    Modal.open(c.nombre, body, `<button class="btn btn-secondary" onclick="Modal.close()">Cerrar</button>`);
+            <div style="background:var(--bg);padding:12px;border-radius:8px;">
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Fee Mensual</div>
+                <div style="font-size:1rem;font-weight:600;color:var(--success);margin-top:2px;">${c.fee_mensual ? fmtMoney(c.fee_mensual) : '$0'}</div>
+            </div>
+            <div style="background:var(--bg);padding:12px;border-radius:8px;">
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Estado Pago</div>
+                <div style="margin-top:4px;"><span class="badge ${ep}">${escHtml(c.estado_pago || 'pendiente')}</span></div>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Rubro:</span> ${escHtml(c.rubro || '-')}</div>
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Etapa:</span> ${escHtml(c.etapa || '-')}</div>
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Contacto:</span> ${escHtml(c.contacto_nombre || '-')}</div>
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Email:</span> ${escHtml(c.email || '-')}</div>
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Teléfono:</span> ${escHtml(c.telefono || '-')}</div>
+            <div><span style="font-size:.75rem;color:var(--text-muted)">Responsable:</span> ${escHtml(c.responsable_nombre || '-')}</div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+            <div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">Servicios contratados</div>
+            <div>${serviciosHtml}</div>
+        </div>
+
+        <div>
+            <div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">Herramientas</div>
+            <div>${herrHtml}</div>
+        </div>
+
+        ${c.presupuesto_ads ? `<div><div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">Presupuesto Ads</div><div style="font-size:.85rem;white-space:pre-line;">${escHtml(c.presupuesto_ads)}</div></div>` : ''}
+        ${c.url_dashboard ? `<div><div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">Dashboard</div><a href="${escHtml(c.url_dashboard)}" target="_blank" style="font-size:.85rem;">${escHtml(c.url_dashboard)}</a></div>` : ''}
+        ${c.notas ? `<div style="border-top:1px solid var(--border);padding-top:12px;"><div style="font-size:.8rem;font-weight:600;margin-bottom:4px;">Notas</div><div style="font-size:.85rem;color:var(--text-muted);white-space:pre-line;">${escHtml(c.notas)}</div></div>` : ''}
+    </div>`;
+
+    const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=${c.id}','_blank')">Ficha PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=${c.id}','_blank')">Doc. Servicio</button>
+        ${APP.canEdit ? `<button class="btn btn-primary btn-sm" onclick="Modal.close();editClient(${c.id})">Editar</button>` : ''}
+        <button class="btn btn-secondary" onclick="Modal.close()">Cerrar</button>`;
+    Modal.open(c.nombre, body, footer);
 }
 
-/** Abre formulario para editar cliente */
 async function editClient(id) {
     const res = await API.get('get_client', { id });
     if (!res) return;
@@ -221,38 +234,28 @@ async function editClient(id) {
     const body = `<form id="frmClient" class="form-grid">
         <input type="hidden" name="id" value="${c.id}">
         ${formField('nombre', 'Nombre', 'text', c.nombre, {required: true})}
-        ${formField('rut', 'RUT', 'text', c.rut)}
         ${formField('rubro', 'Rubro', 'text', c.rubro)}
+        ${formField('contacto_nombre', 'Contacto Principal', 'text', c.contacto_nombre)}
         ${formField('email', 'Email', 'email', c.email)}
         ${formField('telefono', 'Teléfono', 'text', c.telefono)}
-        ${formField('contacto_nombre', 'Nombre Contacto', 'text', c.contacto_nombre)}
-        ${formField('contacto_cargo', 'Cargo Contacto', 'text', c.contacto_cargo)}
-        ${formField('tipo', 'Tipo', 'select', c.tipo, {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo', cerrado:'Cerrado'}})}
-        ${formField('etapa_pipeline', 'Etapa Pipeline', 'select', c.etapa_pipeline, {options: {lead:'Lead', contactado:'Contactado', propuesta:'Propuesta', negociacion:'Negociación', onboarding:'Onboarding', activo:'Activo', cerrado_perdido:'Cerrado Perdido'}})}
-        ${formField('plan', 'Plan', 'select', c.plan || '', {options: {'':'Sin plan', basico:'Básico', estandar:'Estándar', premium:'Premium', custom:'Custom'}})}
+        ${formField('plan', 'Plan', 'select', c.plan || '', {options: planesOptions})}
         ${formField('fee_mensual', 'Fee Mensual ($)', 'number', c.fee_mensual)}
-        ${formField('servicios', 'Servicios', 'text', c.servicios, {fullWidth: true})}
-        ${formField('herramientas', 'Herramientas', 'text', c.herramientas, {fullWidth: true})}
-        ${formField('presupuesto_ads', 'Presupuesto Ads', 'text', c.presupuesto_ads)}
-        ${formField('etapa', 'Etapa Actual', 'text', c.etapa)}
         ${formField('estado_pago', 'Estado Pago', 'select', c.estado_pago || 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
+        ${formField('tipo', 'Tipo', 'select', c.tipo, {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo', cerrado:'Cerrado'}})}
         ${formField('responsable_id', 'Responsable', 'select', c.responsable_id || '', {options: {'':'Sin asignar', ...crmEquipoList}})}
+        ${formField('servicios', 'Servicios (separados por coma)', 'textarea', c.servicios, {fullWidth: true})}
+        ${formField('herramientas', 'Herramientas (separadas por coma)', 'text', c.herramientas, {fullWidth: true})}
+        ${formField('presupuesto_ads', 'Presupuesto Ads', 'text', c.presupuesto_ads)}
+        ${formField('etapa', 'Etapa operativa', 'text', c.etapa)}
         ${formField('url_dashboard', 'URL Dashboard', 'text', c.url_dashboard)}
-        ${formField('direccion', 'Dirección', 'text', c.direccion, {fullWidth: true})}
         ${formField('notas', 'Notas', 'textarea', c.notas, {fullWidth: true})}
     </form>`;
-    const footer = `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
-        <button class="btn btn-primary" onclick="updateClient()">Actualizar</button>`;
-    Modal.open('Editar Cliente', body, footer);
+    Modal.open('Editar: ' + c.nombre, body, `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button><button class="btn btn-primary" onclick="updateClient()">Guardar</button>`);
 }
 
-/** Actualiza cliente via API */
 async function updateClient() {
     const data = getFormData('frmClient');
     const res = await API.post('update_client', data);
-    if (res) {
-        toast('Cliente actualizado');
-        refreshPage();
-    }
+    if (res) { toast('Cliente actualizado'); refreshPage(); }
 }
 </script>

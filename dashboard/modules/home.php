@@ -1,174 +1,122 @@
 <?php
 /**
- * Módulo Home — Resumen general, KPIs cruzados, alertas, actividad reciente
- * Agrega datos de todos los módulos para dar una vista panorámica
+ * Módulo Home — Vista panorámica con KPIs, alertas y actividad
  */
 
-// KPIs agregados — Facand
 $total_clientes    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo"') ?? 0;
 $fee_mensual_total = query_scalar('SELECT COALESCE(SUM(fee_mensual),0) FROM clientes WHERE tipo = "activo" AND estado_pago != "canje"') ?? 0;
-$pagos_pendientes  = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND estado_pago IN ("pendiente","vencido")') ?? 0;
+$pagos_pendientes  = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND estado_pago IN ("pendiente","vencido") AND fee_mensual > 0') ?? 0;
 $pagos_vencidos    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND estado_pago = "vencido"') ?? 0;
 $tareas_pendientes = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso")') ?? 0;
 $tareas_atrasadas  = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso") AND fecha_limite < date("now") AND fecha_limite IS NOT NULL') ?? 0;
-
-// Financieros
-$ingresos_mes = query_scalar('SELECT COALESCE(SUM(monto),0) FROM finanzas WHERE tipo = "ingreso" AND strftime("%Y-%m", fecha) = strftime("%Y-%m", "now")') ?? 0;
-$gastos_mes   = query_scalar('SELECT COALESCE(SUM(monto),0) FROM finanzas WHERE tipo = "gasto" AND strftime("%Y-%m", fecha) = strftime("%Y-%m", "now")') ?? 0;
-
-// Cuentas por cobrar
-$por_cobrar_total    = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial")') ?? 0;
-$cuentas_vencidas    = query_scalar('SELECT COUNT(*) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial") AND fecha_vencimiento < date("now") AND fecha_vencimiento IS NOT NULL') ?? 0;
-
-// Facturación mes actual
-$facturado_mes = query_scalar('SELECT COALESCE(SUM(total),0) FROM facturas WHERE strftime("%Y-%m", fecha_emision) = strftime("%Y-%m", "now") AND estado != "anulada"') ?? 0;
+$facturado_mes     = query_scalar('SELECT COALESCE(SUM(total),0) FROM facturas WHERE strftime("%Y-%m", fecha_emision) = strftime("%Y-%m", "now") AND estado != "anulada"') ?? 0;
+$cobrado_mes       = query_scalar('SELECT COALESCE(SUM(monto),0) FROM abonos WHERE strftime("%Y-%m", fecha) = strftime("%Y-%m", "now")') ?? 0;
+$por_cobrar        = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial")') ?? 0;
+$proyectos_activos = query_scalar('SELECT COUNT(*) FROM proyectos WHERE estado = "activo"') ?? 0;
 
 // Alertas
 $alertas = [];
-
-// Tareas atrasadas
+$clientes_vencidos = query_all('SELECT nombre, fee_mensual FROM clientes WHERE tipo = "activo" AND estado_pago = "vencido" ORDER BY fee_mensual DESC LIMIT 10');
+foreach ($clientes_vencidos as $cv) {
+    $alertas[] = ['tipo' => 'danger', 'icono' => '!', 'texto' => "Pago vencido: <strong>{$cv['nombre']}</strong> — " . format_money($cv['fee_mensual'])];
+}
 $tareas_atr = query_all('SELECT t.titulo, t.fecha_limite, c.nombre as cliente FROM tareas t LEFT JOIN clientes c ON t.cliente_id = c.id WHERE t.estado IN ("pendiente","en_progreso") AND t.fecha_limite < date("now") AND t.fecha_limite IS NOT NULL ORDER BY t.fecha_limite LIMIT 5');
 foreach ($tareas_atr as $ta) {
     $dias = days_overdue($ta['fecha_limite']);
-    $alertas[] = ['tipo' => 'danger', 'texto' => "Tarea \"{$ta['titulo']}\" ({$ta['cliente']}) — {$dias} días de atraso"];
+    $alertas[] = ['tipo' => 'warning', 'icono' => '!', 'texto' => "Tarea atrasada: <strong>{$ta['titulo']}</strong> ({$ta['cliente']}) — {$dias} días"];
 }
-
-// Cuentas por cobrar vencidas
 $cuentas_venc = query_all('SELECT cc.monto_pendiente, cc.fecha_vencimiento, c.nombre as cliente FROM cuentas_cobrar cc JOIN clientes c ON cc.cliente_id = c.id WHERE cc.estado IN ("pendiente","parcial") AND cc.fecha_vencimiento < date("now") AND cc.fecha_vencimiento IS NOT NULL ORDER BY cc.fecha_vencimiento LIMIT 5');
 foreach ($cuentas_venc as $cv) {
     $dias = days_overdue($cv['fecha_vencimiento']);
-    $alertas[] = ['tipo' => 'danger', 'texto' => "Cobro vencido: {$cv['cliente']} — " . format_money($cv['monto_pendiente']) . " ({$dias} días)"];
+    $alertas[] = ['tipo' => 'danger', 'icono' => '$', 'texto' => "CxC vencida: <strong>{$cv['cliente']}</strong> — " . format_money($cv['monto_pendiente']) . " ({$dias} días)"];
 }
 
-// Clientes con pago vencido
-$clientes_vencidos = query_all('SELECT nombre, fee_mensual FROM clientes WHERE tipo = "activo" AND estado_pago = "vencido" ORDER BY nombre LIMIT 10');
-foreach ($clientes_vencidos as $cv) {
-    $alertas[] = ['tipo' => 'danger', 'texto' => "Pago vencido: {$cv['nombre']} — " . format_money($cv['fee_mensual'])];
-}
+// Clientes recientes
+$clientes_recientes = query_all('SELECT nombre, plan, fee_mensual, etapa, estado_pago FROM clientes WHERE tipo = "activo" ORDER BY updated_at DESC LIMIT 8');
 
-// Proyectos próximos a vencer (7 días)
-$proyectos_prox = query_all('SELECT p.nombre, p.fecha_limite, c.nombre as cliente FROM proyectos p LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.estado = "activo" AND p.fecha_limite BETWEEN date("now") AND date("now", "+7 days") ORDER BY p.fecha_limite LIMIT 5');
-foreach ($proyectos_prox as $pp) {
-    $alertas[] = ['tipo' => 'warning', 'texto' => "Proyecto \"{$pp['nombre']}\" ({$pp['cliente']}) vence el " . format_date($pp['fecha_limite'])];
-}
+// Actividad
+$actividad = query_all('SELECT a.*, u.nombre as usuario FROM actividad a LEFT JOIN usuarios u ON a.usuario_id = u.id ORDER BY a.created_at DESC LIMIT 10');
 
-// Actividad reciente
-$actividad = query_all('SELECT a.*, u.nombre as usuario FROM actividad a LEFT JOIN usuarios u ON a.usuario_id = u.id ORDER BY a.created_at DESC LIMIT 15');
-
-// Ingresos últimos 6 meses para gráfico
-$chart_data = query_all('SELECT strftime("%Y-%m", fecha) as mes, SUM(CASE WHEN tipo = "ingreso" THEN monto ELSE 0 END) as ingresos, SUM(CASE WHEN tipo = "gasto" THEN monto ELSE 0 END) as gastos FROM finanzas WHERE fecha >= date("now", "-6 months") GROUP BY mes ORDER BY mes');
+$meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
 ?>
 
-<!-- KPIs -->
-<div class="kpi-grid">
-    <div class="kpi-card">
+<div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+    <div class="kpi-card" style="border-left: 3px solid var(--accent);">
         <div class="kpi-label">Fee Mensual Total</div>
-        <div class="kpi-value"><?= format_money($fee_mensual_total) ?></div>
+        <div class="kpi-value" style="color: var(--accent);"><?= format_money($fee_mensual_total) ?></div>
         <div class="kpi-sub"><?= $total_clientes ?> clientes activos</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card" style="border-left: 3px solid var(--success);">
+        <div class="kpi-label">Cobrado Este Mes</div>
+        <div class="kpi-value success"><?= format_money($cobrado_mes) ?></div>
+        <div class="kpi-sub">Facturado: <?= format_money($facturado_mes) ?></div>
+    </div>
+    <div class="kpi-card" style="border-left: 3px solid <?= $por_cobrar > 0 ? 'var(--warning)' : 'var(--success)' ?>;">
+        <div class="kpi-label">Por Cobrar</div>
+        <div class="kpi-value <?= $por_cobrar > 0 ? 'warning' : 'success' ?>"><?= format_money($por_cobrar) ?></div>
+        <div class="kpi-sub"><?= $pagos_pendientes ?> pendientes<?= $pagos_vencidos > 0 ? " · <span style='color:var(--danger)'>{$pagos_vencidos} vencidos</span>" : '' ?></div>
+    </div>
+    <div class="kpi-card" style="border-left: 3px solid <?= $tareas_atrasadas > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>;">
+        <div class="kpi-label">Tareas</div>
+        <div class="kpi-value"><?= $tareas_pendientes ?></div>
+        <div class="kpi-sub"><?= $tareas_atrasadas > 0 ? "<span style='color:var(--danger)'>{$tareas_atrasadas} atrasadas</span>" : 'Ninguna atrasada' ?> · <?= $proyectos_activos ?> proyectos</div>
+    </div>
+    <div class="kpi-card" style="border-left: 3px solid var(--text-muted);">
         <div class="kpi-label">Clientes Activos</div>
         <div class="kpi-value"><?= $total_clientes ?></div>
     </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Pagos Pendientes</div>
-        <div class="kpi-value <?= $pagos_vencidos > 0 ? 'danger' : ($pagos_pendientes > 0 ? 'warning' : '') ?>"><?= $pagos_pendientes ?></div>
-        <?php if ($pagos_vencidos > 0): ?>
-            <div class="kpi-sub" style="color: var(--danger)"><?= $pagos_vencidos ?> vencidos</div>
-        <?php endif; ?>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Tareas Pendientes</div>
-        <div class="kpi-value <?= $tareas_atrasadas > 0 ? 'warning' : '' ?>"><?= $tareas_pendientes ?></div>
-        <?php if ($tareas_atrasadas > 0): ?>
-            <div class="kpi-sub" style="color: var(--danger)"><?= $tareas_atrasadas ?> atrasadas</div>
-        <?php endif; ?>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Facturado Este Mes</div>
-        <div class="kpi-value"><?= format_money($facturado_mes) ?></div>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Resultado Mes</div>
-        <?php $resultado = $ingresos_mes - $gastos_mes; ?>
-        <div class="kpi-value <?= $resultado >= 0 ? 'success' : 'danger' ?>"><?= format_money($resultado) ?></div>
-        <div class="kpi-sub">Ingresos: <?= format_money($ingresos_mes) ?> | Gastos: <?= format_money($gastos_mes) ?></div>
-    </div>
 </div>
 
+<?php if (!empty($alertas)): ?>
+<div style="margin-bottom: 24px;">
+    <?php foreach ($alertas as $a): ?>
+    <div class="alert-item alert-<?= $a['tipo'] ?>" style="margin-bottom: 6px;">
+        <span class="alert-icon" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;background:<?= $a['tipo'] === 'danger' ? 'rgba(239,68,68,.2)' : 'rgba(234,179,8,.2)' ?>;color:<?= $a['tipo'] === 'danger' ? 'var(--danger)' : 'var(--warning)' ?>;"><?= $a['icono'] ?></span>
+        <span class="alert-text"><?= $a['texto'] ?></span>
+    </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <div class="grid-2">
-    <!-- Alertas -->
-    <div>
-        <div class="section-header">
-            <h3 class="section-title">Alertas</h3>
+    <!-- Clientes recientes -->
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-title">Clientes Activos</span>
+            <a href="?page=crm" class="btn btn-secondary btn-sm">Ver todos</a>
         </div>
-        <?php if (empty($alertas)): ?>
-            <div class="empty-state"><p>Sin alertas pendientes</p></div>
-        <?php else: ?>
-            <div class="alerts-list">
-                <?php foreach ($alertas as $a): ?>
-                    <div class="alert-item alert-<?= $a['tipo'] ?>">
-                        <span class="alert-icon"><?= $a['tipo'] === 'danger' ? '&#9888;' : '&#9432;' ?></span>
-                        <span class="alert-text"><?= safe($a['texto']) ?></span>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+        <table>
+            <thead><tr><th>Cliente</th><th>Plan</th><th>Fee</th><th>Pago</th></tr></thead>
+            <tbody>
+            <?php foreach ($clientes_recientes as $c): ?>
+                <tr>
+                    <td><strong><?= safe($c['nombre']) ?></strong><?= $c['etapa'] ? '<br><span style="font-size:.7rem;color:var(--text-muted)">' . safe($c['etapa']) . '</span>' : '' ?></td>
+                    <td><span class="badge status-info" style="font-size:.7rem"><?= safe($c['plan'] ?: '-') ?></span></td>
+                    <td style="font-weight:600;"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) : '-' ?></td>
+                    <td><span class="badge <?= $c['estado_pago'] === 'pagado' ? 'status-success' : ($c['estado_pago'] === 'vencido' ? 'status-danger' : ($c['estado_pago'] === 'canje' ? 'status-muted' : 'status-warning')) ?>"><?= ucfirst($c['estado_pago']) ?></span></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
 
-    <!-- Actividad Reciente -->
+    <!-- Actividad reciente -->
     <div>
         <div class="section-header">
             <h3 class="section-title">Actividad Reciente</h3>
         </div>
         <?php if (empty($actividad)): ?>
-            <div class="empty-state"><p>Sin actividad registrada</p></div>
+            <div style="color:var(--text-muted); font-size:.85rem; padding:20px 0;">Sin actividad registrada. Las acciones en el dashboard se registran aqui automaticamente.</div>
         <?php else: ?>
             <div class="activity-list">
-                <?php foreach ($actividad as $act): ?>
-                    <div class="activity-item">
-                        <span class="activity-dot"></span>
-                        <span class="activity-text">
-                            <strong><?= safe($act['usuario'] ?? 'Sistema') ?></strong>
-                            <?= safe($act['accion']) ?>
-                            <span style="color: var(--text-muted)">[<?= safe($act['modulo']) ?>]</span>
-                        </span>
-                        <span class="activity-time"><?= time_ago($act['created_at']) ?></span>
-                    </div>
-                <?php endforeach; ?>
+            <?php foreach ($actividad as $act): ?>
+                <div class="activity-item">
+                    <span class="activity-dot"></span>
+                    <span class="activity-text"><strong><?= safe($act['usuario'] ?? 'Sistema') ?></strong> <?= safe($act['accion']) ?> <span style="color:var(--text-muted)">[<?= safe($act['modulo']) ?>]</span></span>
+                    <span class="activity-time"><?= time_ago($act['created_at']) ?></span>
+                </div>
+            <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </div>
 </div>
-
-<!-- Gráfico Ingresos vs Gastos -->
-<?php if (!empty($chart_data)): ?>
-<div class="chart-container">
-    <div class="chart-title">Ingresos vs Gastos — Últimos 6 Meses</div>
-    <div class="bar-chart" id="financeChart">
-        <?php
-        $max_val = 1;
-        foreach ($chart_data as $d) {
-            $max_val = max($max_val, $d['ingresos'], $d['gastos']);
-        }
-        foreach ($chart_data as $d):
-            $ing_h = $max_val > 0 ? round($d['ingresos'] / $max_val * 100) : 0;
-            $gas_h = $max_val > 0 ? round($d['gastos'] / $max_val * 100) : 0;
-            $mes_label = substr($d['mes'], 5);
-        ?>
-        <div class="bar-item">
-            <div class="bar-value" style="color: var(--success)"><?= format_money($d['ingresos']) ?></div>
-            <div style="display:flex; gap:3px; align-items:flex-end; height:120px; width:100%;">
-                <div class="bar" style="height: <?= $ing_h ?>%; background: var(--success); flex:1;"></div>
-                <div class="bar" style="height: <?= $gas_h ?>%; background: var(--danger); flex:1;"></div>
-            </div>
-            <div class="bar-label"><?= $mes_label ?></div>
-        </div>
-        <?php endforeach; ?>
-    </div>
-    <div style="display:flex; gap:16px; margin-top:12px; font-size:.75rem;">
-        <span style="color:var(--success)">&#9632; Ingresos</span>
-        <span style="color:var(--danger)">&#9632; Gastos</span>
-    </div>
-</div>
-<?php endif; ?>
