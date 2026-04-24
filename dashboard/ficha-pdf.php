@@ -109,6 +109,18 @@ li.done { color: #888; text-decoration: line-through; }
 </div>
 <?php endif; ?>
 
+<!-- Presupuesto -->
+<?php if (!empty($ficha['presupuesto'])): ?>
+<div class="section">
+    <div class="section-title">Presupuesto</div>
+    <ul>
+        <?php foreach ($ficha['presupuesto'] as $p): ?>
+        <li<?= stripos($p, 'total') !== false ? ' style="font-weight:700"' : '' ?>><?= htmlspecialchars($p) ?></li>
+        <?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>
+
 <!-- Equipo -->
 <?php if (!empty($ficha['equipo'])): ?>
 <div class="section">

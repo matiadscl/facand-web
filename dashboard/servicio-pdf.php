@@ -83,9 +83,14 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a1a; backgro
     </div>
     <div class="client-banner">
         <h2><?= htmlspecialchars($nombre) ?></h2>
-        <?php if ($plan): ?>
-        <span class="plan-badge"><?= htmlspecialchars($plan['nombre']) ?></span>
-        <?php endif; ?>
+        <div style="text-align:right">
+            <?php if ($plan): ?>
+            <span class="plan-badge"><?= htmlspecialchars($plan['nombre']) ?></span>
+            <?php endif; ?>
+            <?php if ($fee): ?>
+            <div style="font-size:12px;color:#ccc;margin-top:4px"><?= htmlspecialchars($fee) ?></div>
+            <?php endif; ?>
+        </div>
     </div>
 </div>
 
@@ -152,6 +157,18 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a1a; backgro
     <p style="color:#888">Servicios por definir — proyecto personalizado.</p>
     <?php endif; ?>
 </div>
+
+<?php if (!empty($ficha['herramientas'])): ?>
+<div class="section">
+    <div class="section-title">Herramientas</div>
+    <p style="font-size:12px;color:#666;margin-bottom:10px">Las siguientes herramientas son configuradas y gestionadas por Facand. Las cuentas son propiedad del cliente.</p>
+    <div class="tool-tags">
+        <?php foreach ($ficha['herramientas'] as $h): ?>
+        <span class="tool-tag"><?= htmlspecialchars($h) ?></span>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 
 <!-- Material audiovisual -->

@@ -21,6 +21,16 @@ function listClientesFichas(): array {
     return $result;
 }
 
+function parseAllFichas(): array {
+    $fichas = listClientesFichas();
+    $result = [];
+    foreach ($fichas as $slug => $meta) {
+        $ficha = parseClienteFicha($slug);
+        if ($ficha) $result[$slug] = $ficha;
+    }
+    return $result;
+}
+
 function parseClienteFicha(string $slug): ?array {
     $path = getClientesDir() . $slug . '.md';
     if (!file_exists($path)) return null;
@@ -36,6 +46,7 @@ function parseClienteFicha(string $slug): ?array {
         'plan' => '',
         'fee' => '',
         'servicios' => [],
+        'presupuesto' => [],
         'herramientas' => [],
         'pendientes' => [],
         'pendientes_done' => [],
@@ -84,6 +95,13 @@ function parseClienteFicha(string $slug): ?array {
     if (!$srvSection) $srvSection = extractSection($content, '### Servicios activos');
     if ($srvSection) {
         $data['servicios'] = extractListItems($srvSection);
+    }
+
+    // Presupuesto
+    $presSection = extractSection($content, '### Presupuesto publicitario');
+    if (!$presSection) $presSection = extractSection($content, '### Presupuesto');
+    if ($presSection) {
+        $data['presupuesto'] = extractListItems($presSection);
     }
 
     // Herramientas

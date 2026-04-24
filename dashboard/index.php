@@ -7,8 +7,10 @@ require_once __DIR__ . '/includes/catalogo.php';
 
 // Fichas de clientes desde markdown
 $fichasClientes = listClientesFichas();
+$fichasParsed = parseAllFichas();
 $catalogoPlanes = getCatalogo();
 $clientesPlanMap = getClientesPlanMap();
+
 
 // Cargar ficha si se pide
 $fichaActual = null;
@@ -34,6 +36,17 @@ $resumen = [
 ];
 
 $clientes = queryAll("SELECT c.*, e.nombre as responsable_nombre FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.estado, c.nombre");
+
+// Build lookup: DB client id => ficha slug
+$clienteFichaMap = [];
+foreach ($clientes as $cl) {
+    foreach ($fichasParsed as $fSlug => $fData) {
+        if (stripos($fData['nombre'], explode(' ', $cl['nombre'])[0]) !== false || stripos($cl['nombre'], $fData['nombre']) !== false) {
+            $clienteFichaMap[$cl['id']] = $fSlug;
+            break;
+        }
+    }
+}
 $clientesActivos = array_filter($clientes, fn($c) => $c['estado'] === 'activo');
 $proyectos = queryAll("SELECT p.*, c.nombre as cliente_nombre, e.nombre as responsable_nombre FROM proyectos p JOIN clientes c ON p.cliente_id = c.id LEFT JOIN equipo e ON p.responsable_id = e.id ORDER BY p.created_at DESC");
 $tareas = queryAll("SELECT t.*, c.nombre as cliente_nombre, p.nombre as proyecto_nombre, e.nombre as asignado_nombre FROM tareas t JOIN clientes c ON t.cliente_id = c.id LEFT JOIN proyectos p ON t.proyecto_id = p.id LEFT JOIN equipo e ON t.asignado_a = e.id ORDER BY CASE t.prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, t.fecha_limite");
@@ -353,91 +366,88 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                         <thead>
                             <tr>
                                 <th>Cliente</th>
-                                <th>Tipo</th>
+                                <th>Plan</th>
                                 <th>Servicios</th>
                                 <?php if ($isSocio): ?>
-                                <th>Implementación</th>
                                 <th>Fee mensual</th>
-                                <th>Adicionales</th>
-                                <th>Total/mes</th>
                                 <th>Estado pago</th>
                                 <?php endif; ?>
-                                <th>Ejecutivo</th>
-                                <th>Contacto</th>
+                                <th>Etapa</th>
                                 <th>Estado</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($clientes as $cl):
-                                $sub = $suscripcionesMap[$cl['id']] ?? null;
-                                $adds = $saMap[$cl['id']] ?? [];
-                                $feeMensual = $sub ? (int)$sub['fee_mensual'] : (int)$cl['fee_mensual'];
-                                $totalAdds = array_sum(array_column($adds, 'monto'));
-                                $totalMes = $feeMensual + $totalAdds;
-                                $implMonto = $sub ? (int)$sub['implementacion_monto'] : 0;
-                                $implEstado = $sub['implementacion_estado'] ?? null;
-                                $implPagado = $sub ? (int)$sub['implementacion_pagado'] : 0;
+                                $fichaSlugMatch = $clienteFichaMap[$cl['id']] ?? null;
+                                $fichaData = $fichaSlugMatch ? ($fichasParsed[$fichaSlugMatch] ?? null) : null;
+                                $planMapEntry = $fichaSlugMatch ? ($clientesPlanMap[$fichaSlugMatch] ?? null) : null;
+                                $planKey = $planMapEntry['plan'] ?? null;
+                                $planInfo = ($planKey && isset($catalogoPlanes[$planKey])) ? $catalogoPlanes[$planKey] : null;
+                                $planNombre = $planInfo ? $planInfo['nombre'] : ($fichaData['plan'] ?? '');
+                                $feeDisplay = $fichaData['fee'] ?? '';
+                                $fichaServicios = $fichaData['servicios'] ?? [];
+                                $etapa = $fichaData['etapa'] ?? '';
                             ?>
                             <tr data-estado="<?= $cl['estado'] ?>">
                                 <td>
                                     <strong><?= htmlspecialchars($cl['nombre']) ?></strong>
                                     <?php if ($cl['notas']): ?><br><span style="font-size:0.72rem;color:var(--text-muted)"><?= htmlspecialchars(substr($cl['notas'], 0, 50)) ?></span><?php endif; ?>
                                 </td>
-                                <td><span class="badge <?= $cl['tipo'] === 'suscripcion' ? 'badge-en-progreso' : 'badge-nuevo' ?>"><?= $cl['tipo'] === 'suscripcion' ? 'Suscripción' : 'Puntual' ?></span></td>
                                 <td>
-                                    <div class="client-services">
-                                        <?php foreach (explode(',', $cl['servicios'] ?? '') as $s): $s = trim($s); if ($s): ?>
-                                            <span class="service-tag"><?= htmlspecialchars($s) ?></span>
-                                        <?php endif; endforeach; ?>
-                                    </div>
-                                </td>
-                                <?php if ($isSocio): ?>
-                                <td class="text-right">
-                                    <?php if ($implMonto > 0): ?>
-                                        <?= formatMoney($implMonto) ?>
-                                        <br><span class="badge badge-<?= $implEstado === 'pagada' ? 'completada' : ($implEstado === 'parcial' ? 'pendiente' : 'critica') ?>" style="font-size:0.65rem"><?= $implEstado ?><?= $implEstado === 'parcial' ? ' (' . formatMoney($implPagado) . ')' : '' ?></span>
-                                    <?php else: echo '-'; endif; ?>
-                                </td>
-                                <td class="text-right"><?= $feeMensual > 0 ? formatMoney($feeMensual) : '-' ?></td>
-                                <td class="text-right">
-                                    <?php if ($totalAdds > 0): ?>
-                                        <?= formatMoney($totalAdds) ?>
-                                        <br><span style="font-size:0.68rem;color:var(--text-muted)"><?= count($adds) ?> servicio<?= count($adds) > 1 ? 's' : '' ?></span>
-                                    <?php else: echo '-'; endif; ?>
-                                </td>
-                                <td class="text-right" style="font-weight:600;color:<?= $totalMes > 0 ? 'var(--success)' : 'var(--text-muted)' ?>">
-                                    <?= $totalMes > 0 ? formatMoney($totalMes) : '-' ?>
-                                </td>
-                                <td>
-                                    <?php $epClass = match($cl['estado_pago']) { 'pagado' => 'badge-completada', 'vencido' => 'badge-critica', default => 'badge-pendiente' }; ?>
-                                    <span class="badge <?= $epClass ?>"><?= $cl['estado_pago'] ?? 'pendiente' ?></span>
-                                </td>
-                                <?php endif; ?>
-                                <td>
-                                    <?php if ($cl['responsable_nombre']): ?>
-                                        <span style="font-size:0.82rem"><?= htmlspecialchars($cl['responsable_nombre']) ?></span>
+                                    <?php if ($planNombre): ?>
+                                        <span class="badge badge-en-progreso"><?= htmlspecialchars($planNombre) ?></span>
+                                        <?php if ($planMapEntry && $planMapEntry['precio_custom']): ?>
+                                            <br><span style="font-size:0.68rem;color:var(--text-muted)"><?= htmlspecialchars($planMapEntry['precio_custom']) ?></span>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <span style="color:var(--text-muted)">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <?php if ($cl['contacto_nombre']): ?>
-                                        <span style="font-size:0.82rem"><?= htmlspecialchars($cl['contacto_nombre']) ?></span>
+                                    <div class="client-services">
+                                        <?php if (!empty($fichaServicios)): ?>
+                                            <?php foreach (array_slice($fichaServicios, 0, 4) as $s): ?>
+                                                <span class="service-tag"><?= htmlspecialchars($s) ?></span>
+                                            <?php endforeach; ?>
+                                            <?php if (count($fichaServicios) > 4): ?>
+                                                <span class="service-tag" style="background:var(--accent);color:#fff">+<?= count($fichaServicios) - 4 ?></span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <?php foreach (explode(',', $cl['servicios'] ?? '') as $s): $s = trim($s); if ($s): ?>
+                                                <span class="service-tag"><?= htmlspecialchars($s) ?></span>
+                                            <?php endif; endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                                <?php if ($isSocio): ?>
+                                <td class="text-right">
+                                    <?php if ($feeDisplay): ?>
+                                        <span style="font-weight:600;color:var(--success)"><?= htmlspecialchars($feeDisplay) ?></span>
+                                    <?php else: echo '-'; endif; ?>
+                                </td>
+                                <td>
+                                    <?php
+                                    $estadoPago = $cl['estado_pago'] ?? 'pendiente';
+                                    $epClass = match($estadoPago) { 'pagado' => 'badge-completada', 'vencido' => 'badge-critica', default => 'badge-pendiente' };
+                                    ?>
+                                    <span class="badge <?= $epClass ?>"><?= $estadoPago ?></span>
+                                    <?php if ($fichaData && $fichaData['estado_pagos']): ?>
+                                        <br><span style="font-size:0.68rem;color:var(--text-muted)"><?= htmlspecialchars(substr(strip_tags($fichaData['estado_pagos']), 0, 40)) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <?php endif; ?>
+                                <td>
+                                    <?php if ($etapa): ?>
+                                        <span style="font-size:0.78rem;font-weight:600"><?= htmlspecialchars($etapa) ?></span>
                                     <?php else: echo '-'; endif; ?>
                                 </td>
                                 <td><span class="badge badge-<?= $cl['estado'] ?>"><?= $cl['estado'] ?></span></td>
                                 <td style="white-space:nowrap">
-                                    <?php
-                                    $fichaSlugMatch = null;
-                                    foreach ($fichasClientes as $fSlug => $fData) {
-                                        if (stripos($fData['nombre'], explode(' ', $cl['nombre'])[0]) !== false || stripos($cl['nombre'], $fData['nombre']) !== false) {
-                                            $fichaSlugMatch = $fSlug;
-                                            break;
-                                        }
-                                    }
-                                    if ($fichaSlugMatch): ?>
+                                    <?php if ($fichaSlugMatch): ?>
                                     <button class="btn-icon" onclick="showPage('ficha-cliente'); loadFichaCliente('<?= $fichaSlugMatch ?>')" title="Ver ficha">📋</button>
+                                    <button class="btn-icon" onclick="window.open('ficha-pdf.php?cliente=<?= $fichaSlugMatch ?>', '_blank')" title="Descargar ficha PDF">📄</button>
+                                    <button class="btn-icon" onclick="window.open('servicio-pdf.php?cliente=<?= $fichaSlugMatch ?>', '_blank')" title="Documento de servicio">📑</button>
                                     <?php endif; ?>
                                     <button class="btn-icon" onclick="editCliente('<?= $cl['id'] ?>')" title="Editar cliente">✏️</button>
                                     <?php if ($isSocio): ?>

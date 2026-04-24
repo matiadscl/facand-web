@@ -452,6 +452,16 @@ async function loadFichaCliente(slug) {
         }
         html += '</div>';
 
+        // Presupuesto
+        if (f.presupuesto && f.presupuesto.length) {
+            html += '<div class="section" style="margin-bottom:1.5rem"><div class="section-header"><h2>Presupuesto</h2></div><ul style="list-style:none;padding:0">';
+            f.presupuesto.forEach(function(p) {
+                var isTotal = p.toLowerCase().indexOf('total') >= 0;
+                html += '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);' + (isTotal ? 'font-weight:700;color:var(--accent)' : '') + '">' + esc(p) + '</li>';
+            });
+            html += '</ul></div>';
+        }
+
         // Equipo
         if (f.equipo && f.equipo.length) {
             html += '<div class="section"><div class="section-header"><h2>Equipo Asignado</h2></div><div class="team-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">';
