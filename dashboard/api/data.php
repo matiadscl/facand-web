@@ -7,6 +7,13 @@ header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
 
+$accionesFinancieras = ['pagos', 'registrar_pago', 'finanzas_resumen', 'suscripcion', 'guardar_suscripcion', 'agregar_servicio_adicional', 'eliminar_servicio_adicional', 'generar_facturacion', 'actualizar_facturacion'];
+if (in_array($action, $accionesFinancieras) && !$isSocio) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Sin permisos para esta acción']);
+    exit;
+}
+
 switch ($action) {
 
     // ── KPIs resumen ────────────────────────────────────────────────────
@@ -43,7 +50,7 @@ switch ($action) {
     case 'actualizar_cliente':
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
         $data = json_decode(file_get_contents('php://input'), true);
-        $fields = ['tipo', 'fee_mensual', 'servicios', 'contacto_nombre', 'contacto_telefono',
+        $fields = ['tipo', 'fee_mensual', 'servicios', 'responsable_id', 'contacto_nombre', 'contacto_telefono',
                     'contacto_email', 'fecha_facturacion', 'estado_pago', 'estado', 'notas', 'url_dashboard'];
         $sets = ['updated_at = CURRENT_TIMESTAMP'];
         $params = [];
@@ -115,7 +122,7 @@ switch ($action) {
         $sets = ['updated_at = CURRENT_TIMESTAMP'];
         $params = [];
         foreach (['estado', 'asignado_a', 'prioridad', 'fecha_limite', 'titulo', 'descripcion', 'proyecto_id'] as $field) {
-            if (isset($data[$field])) { $sets[] = "$field = ?"; $params[] = $data[$field]; }
+            if (array_key_exists($field, $data)) { $sets[] = "$field = ?"; $params[] = $data[$field]; }
         }
         if (isset($data['estado']) && $data['estado'] === 'completada') {
             $sets[] = "completado_at = CURRENT_TIMESTAMP";
@@ -399,6 +406,63 @@ switch ($action) {
         $params[] = (int)$data['id'];
         execute("UPDATE facturacion SET " . implode(', ', $sets) . " WHERE id = ?", $params);
         echo json_encode(['ok' => true]);
+        break;
+
+    // ── Admin: permisos ────────────────────────────────────────────────
+    case 'toggle_permiso':
+        if (!$isAdmin) { http_response_code(403); echo json_encode(['error' => 'Solo admin']); exit; }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
+        $data = json_decode(file_get_contents('php://input'), true);
+        $userId = $data['user_id'];
+        $seccion = $data['seccion'];
+        $actual = (int) queryScalar("SELECT permitido FROM permisos WHERE user_id = ? AND seccion = ?", [$userId, $seccion]);
+        $nuevo = $actual ? 0 : 1;
+        execute("UPDATE permisos SET permitido = ? WHERE user_id = ? AND seccion = ?", [$nuevo, $userId, $seccion]);
+        echo json_encode(['ok' => true, 'permitido' => $nuevo]);
+        break;
+
+    // ── Herramientas ─────────────────────────────────────────────────
+    case 'toggle_herramienta':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
+        $data = json_decode(file_get_contents('php://input'), true);
+        $id = (int)$data['id'];
+        $estadoActual = $data['estado_actual'] ?? 'pendiente';
+        $ciclo = ['pendiente' => 'configurado', 'configurado' => 'no_aplica', 'no_aplica' => 'pendiente'];
+        $nuevo = $ciclo[$estadoActual] ?? 'pendiente';
+        execute("UPDATE herramientas_cliente SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [$nuevo, $id]);
+        echo json_encode(['ok' => true, 'nuevo_estado' => $nuevo]);
+        break;
+
+    case 'update_herr_notas':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
+        $data = json_decode(file_get_contents('php://input'), true);
+        execute("UPDATE herramientas_cliente SET notas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [$data['notas'], (int)$data['id']]);
+        echo json_encode(['ok' => true]);
+        break;
+
+    case 'ficha_cliente':
+        require_once __DIR__ . '/../includes/ficha-parser.php';
+        require_once __DIR__ . '/../includes/catalogo.php';
+        $slug = $_GET['slug'] ?? '';
+        $ficha = $slug ? parseClienteFicha($slug) : null;
+        if (!$ficha) {
+            echo json_encode(['error' => 'Cliente no encontrado']);
+            break;
+        }
+        $planMap = getClientesPlanMap();
+        $catalogo = getCatalogo();
+        $clientePlan = $planMap[$slug] ?? null;
+        $planData = null;
+        if ($clientePlan && $clientePlan['plan'] && isset($catalogo[$clientePlan['plan']])) {
+            $planData = $catalogo[$clientePlan['plan']];
+        }
+        echo json_encode([
+            'ok' => true,
+            'ficha' => $ficha,
+            'plan' => $planData,
+            'plan_key' => $clientePlan['plan'] ?? null,
+            'precio_custom' => $clientePlan['precio_custom'] ?? null,
+        ]);
         break;
 
     default:

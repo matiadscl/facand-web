@@ -2,6 +2,20 @@
 declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/ficha-parser.php';
+require_once __DIR__ . '/includes/catalogo.php';
+
+// Fichas de clientes desde markdown
+$fichasClientes = listClientesFichas();
+$catalogoPlanes = getCatalogo();
+$clientesPlanMap = getClientesPlanMap();
+
+// Cargar ficha si se pide
+$fichaActual = null;
+$fichaSlug = $_GET['ficha'] ?? null;
+if ($fichaSlug) {
+    $fichaActual = parseClienteFicha($fichaSlug);
+}
 
 $hoy = date('Y-m-d');
 $mesActual = date('Y-m');
@@ -19,7 +33,7 @@ $resumen = [
     'pagos_pendientes'   => (int) queryScalar("SELECT COUNT(*) FROM clientes WHERE estado = 'activo' AND estado_pago IN ('pendiente','vencido')"),
 ];
 
-$clientes = queryAll("SELECT * FROM clientes ORDER BY estado, nombre");
+$clientes = queryAll("SELECT c.*, e.nombre as responsable_nombre FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.estado, c.nombre");
 $clientesActivos = array_filter($clientes, fn($c) => $c['estado'] === 'activo');
 $proyectos = queryAll("SELECT p.*, c.nombre as cliente_nombre, e.nombre as responsable_nombre FROM proyectos p JOIN clientes c ON p.cliente_id = c.id LEFT JOIN equipo e ON p.responsable_id = e.id ORDER BY p.created_at DESC");
 $tareas = queryAll("SELECT t.*, c.nombre as cliente_nombre, p.nombre as proyecto_nombre, e.nombre as asignado_nombre FROM tareas t JOIN clientes c ON t.cliente_id = c.id LEFT JOIN proyectos p ON t.proyecto_id = p.id LEFT JOIN equipo e ON t.asignado_a = e.id ORDER BY CASE t.prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, t.fecha_limite");
@@ -78,15 +92,11 @@ $serviciosAdicionalesAll = queryAll("SELECT * FROM servicios_adicionales WHERE a
 $saMap = [];
 foreach ($serviciosAdicionalesAll as $sa) { $saMap[$sa['cliente_id']][] = $sa; }
 
-$agentes = [
-    ['id' => 'orquestador', 'icon' => '🎯', 'nombre' => 'Orquestador', 'desc' => 'Rutea al agente correcto', 'status' => 'online'],
-    ['id' => 'operaciones', 'icon' => '📋', 'nombre' => 'Operaciones', 'desc' => 'Proyectos, tareas, entregas', 'status' => 'online'],
-    ['id' => 'marketing', 'icon' => '📣', 'nombre' => 'Marketing', 'desc' => 'Ads, SEO, contenido, analytics', 'status' => 'building'],
-    ['id' => 'finanzas', 'icon' => '💰', 'nombre' => 'Finanzas', 'desc' => 'Cobros, presupuestos, flujo de caja', 'status' => 'building'],
-    ['id' => 'estrategia', 'icon' => '🧭', 'nombre' => 'Estrategia', 'desc' => 'Planificación, OKRs, propuestas', 'status' => 'building'],
-    ['id' => 'comunicacion', 'icon' => '💬', 'nombre' => 'Comunicación', 'desc' => 'CRM, leads, seguimiento', 'status' => 'building'],
-    ['id' => 'datos', 'icon' => '📊', 'nombre' => 'Datos', 'desc' => 'Dashboards, reportes, alertas', 'status' => 'building'],
-];
+// Herramientas por cliente
+$herramientasAll = queryAll("SELECT h.*, c.nombre as cliente_nombre FROM herramientas_cliente h JOIN clientes c ON h.cliente_id = c.id WHERE c.estado = 'activo' ORDER BY c.nombre, h.categoria, h.herramienta");
+$herramientasMap = [];
+foreach ($herramientasAll as $h) { $herramientasMap[$h['cliente_id']][] = $h; }
+$categorias = ['Tracking & Analytics', 'Campañas', 'Contenido & Assets', 'CRM & Comunicación', 'Web'];
 
 function formatMoney(float $n): string { return '$' . number_format($n, 0, ',', '.'); }
 $meses = ['January'=>'Enero','February'=>'Febrero','March'=>'Marzo','April'=>'Abril','May'=>'Mayo','June'=>'Junio','July'=>'Julio','August'=>'Agosto','September'=>'Septiembre','October'=>'Octubre','November'=>'Noviembre','December'=>'Diciembre'];
@@ -116,9 +126,8 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             <a class="nav-item active" data-page="inicio" onclick="showPage('inicio')">
                 <span class="nav-icon">🏠</span> Inicio
             </a>
-            <a class="nav-item" data-page="agentes" onclick="showPage('agentes')">
-                <span class="nav-icon">🤖</span> Agentes
-                <span class="nav-badge">2/7</span>
+            <a class="nav-item" data-page="herramientas" onclick="showPage('herramientas')">
+                <span class="nav-icon">🔧</span> Herramientas
             </a>
 
             <div class="nav-section">Operaciones</div>
@@ -140,18 +149,22 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             </a>
 
             <div class="nav-section">Gestión</div>
+            <?php if ($isSocio): ?>
             <a class="nav-item" data-page="finanzas" onclick="showPage('finanzas')">
                 <span class="nav-icon">💰</span> Finanzas
                 <?php if ($resumen['pagos_pendientes'] > 0): ?>
                     <span class="nav-badge" style="background:rgba(239,68,68,0.15);color:var(--danger)"><?= $resumen['pagos_pendientes'] ?></span>
                 <?php endif; ?>
             </a>
+            <?php endif; ?>
             <a class="nav-item" data-page="calendario" onclick="showPage('calendario')">
                 <span class="nav-icon">📅</span> Calendario
             </a>
+            <?php if ($isSocio): ?>
             <a class="nav-item" data-page="reportes" onclick="showPage('reportes')">
                 <span class="nav-icon">📊</span> Reportes
             </a>
+            <?php endif; ?>
 
             <div class="nav-section">Sistema</div>
             <a class="nav-item" data-page="equipo" onclick="showPage('equipo')">
@@ -160,13 +173,18 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             <a class="nav-item" data-page="actividad" onclick="showPage('actividad')">
                 <span class="nav-icon">📜</span> Actividad
             </a>
+            <?php if ($isAdmin): ?>
+            <a class="nav-item" data-page="admin" onclick="showPage('admin')">
+                <span class="nav-icon">⚙️</span> Admin
+            </a>
+            <?php endif; ?>
         </nav>
         <div class="sidebar-footer">
             <div class="sidebar-user">
                 <div class="sidebar-user-avatar"><?= strtoupper(substr($currentNombre, 0, 1)) ?></div>
                 <div class="sidebar-user-info">
                     <div class="sidebar-user-name"><?= htmlspecialchars($currentNombre) ?></div>
-                    <div class="sidebar-user-role"><?= htmlspecialchars($currentRol) ?></div>
+                    <div class="sidebar-user-role"><?= htmlspecialchars($currentCargo) ?></div>
                 </div>
             </div>
             <a class="nav-item logout" href="logout.php">
@@ -190,9 +208,9 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             </div>
 
             <!-- Alertas -->
-            <?php if (!empty($tareasVencidas) || !empty($pagosVencidos)): ?>
+            <?php if (!empty($tareasVencidas) || ($isSocio && !empty($pagosVencidos))): ?>
             <div style="margin-bottom: 1.5rem;">
-                <?php foreach ($pagosVencidos as $pv): ?>
+                <?php if ($isSocio): foreach ($pagosVencidos as $pv): ?>
                     <div class="alert-card alert-danger">
                         <div class="alert-card-icon">🔴</div>
                         <div class="alert-card-text">
@@ -200,7 +218,7 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                             <p><?= formatMoney((float)$pv['fee_mensual']) ?> pendiente de cobro</p>
                         </div>
                     </div>
-                <?php endforeach; ?>
+                <?php endforeach; endif; ?>
                 <?php foreach (array_slice($tareasVencidas, 0, 3) as $tv): ?>
                     <div class="alert-card alert-warning">
                         <div class="alert-card-icon">⚠️</div>
@@ -221,11 +239,13 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
 
             <!-- KPIs -->
             <div class="kpi-grid">
+                <?php if ($isSocio): ?>
                 <div class="kpi-card kpi-highlight">
                     <div class="kpi-label">A facturar / mes</div>
                     <div class="kpi-value"><?= formatMoney($totalFacturar) ?></div>
                     <div class="kpi-detail"><?= formatMoney($cobradoMes) ?> cobrado</div>
                 </div>
+                <?php endif; ?>
                 <div class="kpi-card">
                     <div class="kpi-label">Clientes activos</div>
                     <div class="kpi-value"><?= $resumen['clientes_activos'] ?></div>
@@ -289,7 +309,7 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             </div>
 
             <!-- Pagos pendientes rápidos -->
-            <?php if (!empty($pagosPendientes)): ?>
+            <?php if ($isSocio && !empty($pagosPendientes)): ?>
             <div class="section" style="margin-top:1.5rem">
                 <div class="section-header"><h2>Cobros pendientes</h2></div>
                 <div class="table-responsive">
@@ -335,11 +355,14 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                                 <th>Cliente</th>
                                 <th>Tipo</th>
                                 <th>Servicios</th>
+                                <?php if ($isSocio): ?>
                                 <th>Implementación</th>
                                 <th>Fee mensual</th>
                                 <th>Adicionales</th>
                                 <th>Total/mes</th>
                                 <th>Estado pago</th>
+                                <?php endif; ?>
+                                <th>Ejecutivo</th>
                                 <th>Contacto</th>
                                 <th>Estado</th>
                                 <th></th>
@@ -369,6 +392,7 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                                         <?php endif; endforeach; ?>
                                     </div>
                                 </td>
+                                <?php if ($isSocio): ?>
                                 <td class="text-right">
                                     <?php if ($implMonto > 0): ?>
                                         <?= formatMoney($implMonto) ?>
@@ -389,15 +413,36 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                                     <?php $epClass = match($cl['estado_pago']) { 'pagado' => 'badge-completada', 'vencido' => 'badge-critica', default => 'badge-pendiente' }; ?>
                                     <span class="badge <?= $epClass ?>"><?= $cl['estado_pago'] ?? 'pendiente' ?></span>
                                 </td>
+                                <?php endif; ?>
+                                <td>
+                                    <?php if ($cl['responsable_nombre']): ?>
+                                        <span style="font-size:0.82rem"><?= htmlspecialchars($cl['responsable_nombre']) ?></span>
+                                    <?php else: ?>
+                                        <span style="color:var(--text-muted)">-</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <?php if ($cl['contacto_nombre']): ?>
                                         <span style="font-size:0.82rem"><?= htmlspecialchars($cl['contacto_nombre']) ?></span>
                                     <?php else: echo '-'; endif; ?>
                                 </td>
                                 <td><span class="badge badge-<?= $cl['estado'] ?>"><?= $cl['estado'] ?></span></td>
-                                <td>
+                                <td style="white-space:nowrap">
+                                    <?php
+                                    $fichaSlugMatch = null;
+                                    foreach ($fichasClientes as $fSlug => $fData) {
+                                        if (stripos($fData['nombre'], explode(' ', $cl['nombre'])[0]) !== false || stripos($cl['nombre'], $fData['nombre']) !== false) {
+                                            $fichaSlugMatch = $fSlug;
+                                            break;
+                                        }
+                                    }
+                                    if ($fichaSlugMatch): ?>
+                                    <button class="btn-icon" onclick="showPage('ficha-cliente'); loadFichaCliente('<?= $fichaSlugMatch ?>')" title="Ver ficha">📋</button>
+                                    <?php endif; ?>
                                     <button class="btn-icon" onclick="editCliente('<?= $cl['id'] ?>')" title="Editar cliente">✏️</button>
+                                    <?php if ($isSocio): ?>
                                     <button class="btn-icon" onclick="editSuscripcion('<?= $cl['id'] ?>', '<?= htmlspecialchars($cl['nombre']) ?>')" title="Suscripción">💳</button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -408,8 +453,29 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
         </div>
 
         <!-- ════════════════════════════════════════════════════════════════ -->
+        <!-- FICHA CLIENTE                                                   -->
+        <!-- ════════════════════════════════════════════════════════════════ -->
+        <div class="page" id="page-ficha-cliente" style="display:none">
+            <div class="page-header">
+                <div>
+                    <h1 id="ficha-title">Ficha de Cliente</h1>
+                    <span class="page-subtitle" id="ficha-subtitle"></span>
+                </div>
+                <div class="header-controls">
+                    <button class="btn btn-sm btn-secondary" onclick="showPage('clientes')">← Volver</button>
+                    <button class="btn btn-sm btn-primary" id="btn-download-ficha" onclick="downloadFicha()">Descargar Ficha</button>
+                    <button class="btn btn-sm btn-primary" id="btn-download-servicio" onclick="downloadServicio()" style="background:var(--success)">Documento de Servicio</button>
+                </div>
+            </div>
+            <div id="ficha-content">
+                <div class="empty-state"><div class="empty-state-icon">📋</div><h3>Selecciona un cliente</h3><p>Haz clic en el icono 📋 en la tabla de clientes</p></div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════════ -->
         <!-- FINANZAS                                                        -->
         <!-- ════════════════════════════════════════════════════════════════ -->
+        <?php if ($isSocio): ?>
         <div class="page" id="page-finanzas" style="display:none">
             <div class="page-header">
                 <h1>Finanzas</h1>
@@ -595,6 +661,7 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                 <?php endif; ?>
             </div>
         </div>
+        <?php endif; /* fin isSocio finanzas */ ?>
 
         <!-- ════════════════════════════════════════════════════════════════ -->
         <!-- TAREAS (con filtros + Kanban)                                   -->
@@ -652,13 +719,19 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                                     <td><?= htmlspecialchars($t['proyecto_nombre'] ?? '-') ?></td>
                                     <td><?= htmlspecialchars($t['asignado_nombre'] ?? '-') ?></td>
                                     <td><span class="badge badge-<?= $t['prioridad'] ?>"><?= $t['prioridad'] ?></span></td>
-                                    <td style="<?= $vencida ? 'color:var(--danger);font-weight:600' : '' ?>"><?= $t['fecha_limite'] ?? '-' ?></td>
+                                    <td class="fecha-limite-cell" style="<?= $vencida ? 'color:var(--danger);font-weight:600' : '' ?>;cursor:pointer;position:relative" onclick="openDatePicker(<?= $t['id'] ?>, this)">
+                                        <span class="fecha-display"><?= $t['fecha_limite'] ?? '-' ?></span>
+                                        <input type="date" class="fecha-input" value="<?= $t['fecha_limite'] ?? '' ?>" style="position:absolute;opacity:0;width:0;height:0;top:0;left:0" onchange="updateFechaLimite(<?= $t['id'] ?>, this.value, this)">
+                                    </td>
                                     <td><span class="badge badge-<?= str_replace('_', '-', $t['estado']) ?>"><?= $t['estado'] ?></span></td>
-                                    <td>
+                                    <td style="white-space:nowrap">
                                         <?php if ($t['estado'] === 'pendiente'): ?>
                                             <button class="btn-icon" onclick="updateTarea(<?= $t['id'] ?>, 'en_progreso')" title="Iniciar">▶</button>
                                         <?php elseif ($t['estado'] === 'en_progreso'): ?>
+                                            <button class="btn-icon" onclick="updateTarea(<?= $t['id'] ?>, 'pendiente')" title="Pausar">⏸</button>
                                             <button class="btn-icon" onclick="updateTarea(<?= $t['id'] ?>, 'completada')" title="Completar">✓</button>
+                                        <?php elseif ($t['estado'] === 'completada'): ?>
+                                            <button class="btn-icon" onclick="updateTarea(<?= $t['id'] ?>, 'pendiente')" title="Reabrir">↩</button>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -711,11 +784,31 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                 <button onclick="changeMonth(0)" class="btn btn-sm btn-secondary" style="margin-left:auto">Hoy</button>
             </div>
             <div class="calendar-grid" id="calendar-grid"></div>
+
+            <div class="section" style="margin-top:1.5rem">
+                <div class="section-header"><h2>Sincronizar con Google Calendar</h2></div>
+                <div style="padding:1rem">
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem">Suscribe esta URL en Google Calendar para ver tareas y proyectos automáticamente. Se actualiza cada vez que Google refresca el feed.</p>
+                    <?php
+                    $calTokens = ['mati' => 'fcal_m4t1_2026', 'fabi' => 'fcal_f4b1_2026', 'nico' => 'fcal_n1c0_2026'];
+                    $calUrl = "https://facand.com/dashboard/api/calendar.php?user={$currentUser}&token={$calTokens[$currentUser]}";
+                    ?>
+                    <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap">
+                        <input type="text" id="ical-url" value="<?= htmlspecialchars($calUrl) ?>" readonly style="flex:1;min-width:300px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;font-size:0.8rem;color:var(--text-primary);font-family:monospace">
+                        <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('ical-url').value);this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar URL',2000)">Copiar URL</button>
+                        <a class="btn btn-sm btn-secondary" href="https://calendar.google.com/calendar/r/settings/addbyurl" target="_blank">Abrir Google Calendar</a>
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.75rem">
+                        <strong>Pasos:</strong> 1) Copiar URL → 2) Abrir Google Calendar → 3) Otros calendarios (+) → Desde URL → 4) Pegar y suscribirse
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ════════════════════════════════════════════════════════════════ -->
         <!-- REPORTES                                                        -->
         <!-- ════════════════════════════════════════════════════════════════ -->
+        <?php if ($isSocio): ?>
         <div class="page" id="page-reportes" style="display:none">
             <div class="page-header">
                 <h1>Reportes por Cliente</h1>
@@ -747,28 +840,97 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                 <?php endforeach; ?>
             </div>
         </div>
+        <?php endif; /* fin isSocio reportes */ ?>
 
         <!-- ════════════════════════════════════════════════════════════════ -->
-        <!-- AGENTES / PROYECTOS / EQUIPO / ACTIVIDAD (sin cambios grandes) -->
+        <!-- HERRAMIENTAS                                                    -->
         <!-- ════════════════════════════════════════════════════════════════ -->
-        <div class="page" id="page-agentes" style="display:none">
-            <div class="page-header"><h1>Agentes</h1><span class="page-subtitle">Sistema de agentes especializados por departamento</span></div>
-            <div class="agents-grid">
-                <?php foreach ($agentes as $ag): ?>
-                <div class="agent-card">
-                    <div class="agent-card-header">
-                        <div class="agent-icon <?= $ag['id'] ?>"><?= $ag['icon'] ?></div>
-                        <div>
-                            <div class="agent-card-title"><?= $ag['nombre'] ?></div>
-                            <div class="agent-card-status"><span class="status-dot <?= $ag['status'] ?>"></span><?= $ag['status'] === 'online' ? 'Activo' : 'En construcción' ?></div>
-                        </div>
-                    </div>
-                    <div class="agent-card-desc"><?= $ag['desc'] ?></div>
+        <div class="page" id="page-herramientas" style="display:none">
+            <div class="page-header">
+                <h1>Herramientas</h1>
+                <span class="page-subtitle">Checklist de tracking, campañas y assets por cliente</span>
+            </div>
+
+            <?php
+            $totalHerr = count($herramientasAll);
+            $configHerr = count(array_filter($herramientasAll, fn($h) => $h['estado'] === 'configurado'));
+            $pendHerr = count(array_filter($herramientasAll, fn($h) => $h['estado'] === 'pendiente'));
+            // Lista única de herramientas en orden
+            $herrNombres = [];
+            foreach ($herramientasAll as $h) {
+                if (!isset($herrNombres[$h['herramienta']])) {
+                    $herrNombres[$h['herramienta']] = $h['categoria'];
+                }
+            }
+            // Mapa rápido: cliente_id+herramienta => row
+            $herrIdx = [];
+            foreach ($herramientasAll as $h) {
+                $herrIdx[$h['cliente_id'] . '|' . $h['herramienta']] = $h;
+            }
+            ?>
+
+            <div class="kpi-grid" style="margin-bottom:1.5rem">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total</div>
+                    <div class="kpi-value"><?= $totalHerr ?></div>
                 </div>
-                <?php endforeach; ?>
+                <div class="kpi-card">
+                    <div class="kpi-label">Configuradas</div>
+                    <div class="kpi-value" style="color:var(--success)"><?= $configHerr ?></div>
+                    <div class="kpi-detail"><?= $totalHerr > 0 ? round($configHerr / $totalHerr * 100) : 0 ?>%</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Pendientes</div>
+                    <div class="kpi-value" style="color:var(--warning)"><?= $pendHerr ?></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="table-responsive">
+                    <table class="data-table herr-matrix">
+                        <thead>
+                            <tr>
+                                <th style="position:sticky;left:0;z-index:2;background:var(--bg-card);min-width:140px">Cliente</th>
+                                <?php foreach ($herrNombres as $nombre => $cat): ?>
+                                <th style="text-align:center;font-size:0.65rem;writing-mode:vertical-lr;transform:rotate(180deg);min-width:36px;padding:0.5rem 0.2rem;height:120px" title="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($nombre) ?></th>
+                                <?php endforeach; ?>
+                                <th style="text-align:center;font-size:0.75rem;min-width:50px">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($clientesActivos as $cl):
+                            $herrCl = $herramientasMap[$cl['id']] ?? [];
+                            if (empty($herrCl)) continue;
+                            $cfgCount = count(array_filter($herrCl, fn($h) => $h['estado'] === 'configurado'));
+                            $totCount = count($herrCl);
+                            $pct = $totCount > 0 ? round($cfgCount / $totCount * 100) : 0;
+                        ?>
+                            <tr>
+                                <td style="position:sticky;left:0;z-index:1;background:var(--bg-card);font-weight:600;font-size:0.82rem"><?= htmlspecialchars($cl['nombre']) ?></td>
+                                <?php foreach ($herrNombres as $nombre => $cat):
+                                    $h = $herrIdx[$cl['id'] . '|' . $nombre] ?? null;
+                                    if ($h):
+                                        $icon = $h['estado'] === 'configurado' ? '✅' : ($h['estado'] === 'no_aplica' ? '➖' : '⬜');
+                                ?>
+                                <td style="text-align:center;cursor:pointer;font-size:1rem" onclick="toggleHerramienta(<?= $h['id'] ?>, '<?= $h['estado'] ?>', this)" title="<?= htmlspecialchars($nombre) ?>: <?= $h['estado'] ?><?= $h['notas'] ? ' — ' . htmlspecialchars($h['notas']) : '' ?>"><?= $icon ?></td>
+                                <?php else: ?>
+                                <td style="text-align:center;color:var(--text-muted)">-</td>
+                                <?php endif; endforeach; ?>
+                                <td style="text-align:center;font-weight:600;font-size:0.8rem;color:<?= $pct === 100 ? 'var(--success)' : ($pct >= 50 ? 'var(--accent)' : 'var(--danger)') ?>"><?= $pct ?>%</td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div style="padding:0.75rem;font-size:0.75rem;color:var(--text-muted)">
+                Click para cambiar: ⬜ Pendiente → ✅ Configurado → ➖ No aplica → ⬜ Pendiente
             </div>
         </div>
 
+        <!-- ════════════════════════════════════════════════════════════════ -->
+        <!-- PROYECTOS / EQUIPO / ACTIVIDAD                                  -->
+        <!-- ════════════════════════════════════════════════════════════════ -->
         <div class="page" id="page-proyectos" style="display:none">
             <div class="page-header"><h1>Proyectos</h1>
                 <div class="header-controls"><button class="btn btn-primary btn-sm" onclick="openModal('proyecto')">+ Nuevo proyecto</button></div>
@@ -834,6 +996,68 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                 <?php endif; ?>
             </div>
         </div>
+
+        <!-- ═════════════��═════════════════════════════════��════════════════ -->
+        <!-- ADMIN                                                           -->
+        <!-- ═══════���═══════════════════════════════════════════════���════════ -->
+        <?php if ($isAdmin): ?>
+        <div class="page" id="page-admin" style="display:none">
+            <div class="page-header"><h1>Administración</h1></div>
+
+            <?php
+            $allUsers = [
+                'mati'  => ['nombre' => 'Matías', 'cargo' => 'CEO / CMO', 'rol' => 'admin'],
+                'fabi'  => ['nombre' => 'Fabián Astorga', 'cargo' => 'Analista Programador', 'rol' => 'socio'],
+                'nico'  => ['nombre' => 'Nico Ojeda', 'cargo' => 'Programador', 'rol' => 'equipo'],
+            ];
+            $seccionesAdmin = ['Inicio', 'Herramientas', 'Proyectos', 'Tareas', 'Clientes', 'Finanzas', 'Calendario', 'Reportes', 'Equipo', 'Actividad', 'Admin'];
+            $permisosAll = queryAll("SELECT * FROM permisos");
+            $permMap = [];
+            foreach ($permisosAll as $p) { $permMap[$p['user_id'] . '|' . $p['seccion']] = (int)$p['permitido']; }
+            ?>
+
+            <div class="section">
+                <div class="section-header"><h2>Permisos por sección</h2></div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="min-width:160px">Usuario</th>
+                                <th>Rol</th>
+                                <?php foreach ($seccionesAdmin as $sec): ?>
+                                <th style="text-align:center;font-size:0.72rem;padding:0.4rem 0.3rem"><?= $sec ?></th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($allUsers as $uid => $u):
+                            $rolClass = match($u['rol']) { 'admin' => 'badge-critica', 'socio' => 'badge-completada', default => 'badge-en-progreso' };
+                        ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($u['nombre']) ?></strong><br><span style="font-size:0.72rem;color:var(--text-muted)"><?= htmlspecialchars($u['cargo']) ?></span></td>
+                                <td><span class="badge <?= $rolClass ?>"><?= $u['rol'] ?></span></td>
+                                <?php foreach ($seccionesAdmin as $sec):
+                                    $permitido = $permMap[$uid . '|' . $sec] ?? 0;
+                                    $disabled = ($uid === 'mati');
+                                ?>
+                                <td style="text-align:center;cursor:<?= $disabled ? 'default' : 'pointer' ?>;font-size:1.1rem"
+                                    <?php if (!$disabled): ?>
+                                    onclick="togglePermiso('<?= $uid ?>', '<?= $sec ?>', this)"
+                                    <?php endif; ?>
+                                    title="<?= $uid ?> — <?= $sec ?>: <?= $permitido ? 'Permitido' : 'Bloqueado' ?>"
+                                ><?= $permitido ? '✅' : '❌' ?></td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="padding:0.75rem;font-size:0.75rem;color:var(--text-muted)">
+                    Click en cada celda para activar/desactivar el acceso. Los permisos de Matías (admin) no se pueden modificar.
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
     </main>
 </div>
@@ -940,9 +1164,19 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
                     <select name="estado" id="edit-estado"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select>
                 </div>
             </div>
+            <?php if ($isSocio): ?>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
                 <div class="form-group"><label>Fee mensual ($)</label><input type="number" name="fee_mensual" id="edit-fee"></div>
                 <div class="form-group"><label>Día facturación (1-28)</label><input type="number" name="fecha_facturacion" id="edit-facturacion" min="1" max="28"></div>
+            </div>
+            <?php endif; ?>
+            <div class="form-group"><label>Ejecutivo asignado</label>
+                <select name="responsable_id" id="edit-responsable">
+                    <option value="">Sin asignar</option>
+                    <?php foreach ($equipo as $m): ?>
+                        <option value="<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="form-group"><label>Servicios (separados por coma)</label><input type="text" name="servicios" id="edit-servicios"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
@@ -951,9 +1185,11 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
                 <div class="form-group"><label>Teléfono</label><input type="text" name="contacto_telefono" id="edit-telefono"></div>
+                <?php if ($isSocio): ?>
                 <div class="form-group"><label>Estado pago</label>
                     <select name="estado_pago" id="edit-estado-pago"><option value="pendiente">Pendiente</option><option value="pagado">Pagado</option><option value="vencido">Vencido</option></select>
                 </div>
+                <?php endif; ?>
             </div>
             <div class="form-group"><label>URL Dashboard</label><input type="url" name="url_dashboard" id="edit-url-dashboard"></div>
             <div class="form-group"><label>Notas</label><textarea name="notas" id="edit-notas" rows="2"></textarea></div>
@@ -965,6 +1201,7 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
     </div>
 </div>
 
+<?php if ($isSocio): ?>
 <!-- ═══ Modal: Suscripción ═══ -->
 <div class="modal-overlay" id="modal-suscripcion">
     <div class="modal" style="max-width:600px">
@@ -1030,12 +1267,15 @@ $diasSemana = ['Monday'=>'Lun','Tuesday'=>'Mar','Wednesday'=>'Mié','Thursday'=>
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
+const isSocio = <?= $isSocio ? 'true' : 'false' ?>;
+const isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
 // Data de clientes para edición
 const clientesData = <?= json_encode(array_map(fn($c) => [
     'id' => $c['id'], 'tipo' => $c['tipo'], 'estado' => $c['estado'],
-    'fee_mensual' => $c['fee_mensual'], 'servicios' => $c['servicios'],
+    'responsable_id' => $c['responsable_id'], 'fee_mensual' => $c['fee_mensual'], 'servicios' => $c['servicios'],
     'contacto_nombre' => $c['contacto_nombre'], 'contacto_email' => $c['contacto_email'],
     'contacto_telefono' => $c['contacto_telefono'], 'fecha_facturacion' => $c['fecha_facturacion'],
     'estado_pago' => $c['estado_pago'], 'notas' => $c['notas'], 'url_dashboard' => $c['url_dashboard']

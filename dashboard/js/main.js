@@ -14,7 +14,7 @@ function showPage(pageId) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const saved = localStorage.getItem('facand_page');
-    if (saved && document.getElementById('page-' + saved)) showPage(saved);
+    if (saved && document.getElementById('page-' + saved) && document.querySelector(`.nav-item[data-page="${saved}"]`)) showPage(saved);
 
     // Auto-fill monto en pago al seleccionar cliente
     const pagoCliente = document.getElementById('pago-cliente');
@@ -65,6 +65,22 @@ async function submitTarea(e) {
 async function updateTarea(id, estado) {
     const r = await apiPost('actualizar_tarea', { id, estado });
     if (r.ok) location.reload();
+}
+
+function openDatePicker(id, cell) {
+    const input = cell.querySelector('.fecha-input');
+    if (input.showPicker) input.showPicker();
+    else input.click();
+}
+
+async function updateFechaLimite(id, fecha, input) {
+    const r = await apiPost('actualizar_tarea', { id, fecha_limite: fecha || null });
+    if (r.ok) {
+        const display = input.closest('td').querySelector('.fecha-display');
+        display.textContent = fecha || '-';
+        input.closest('td').style.color = '';
+        input.closest('td').style.fontWeight = '';
+    }
 }
 
 // ── Proyecto CRUD ───────────────────────────────────────────────────────────
@@ -200,13 +216,17 @@ function editCliente(id) {
     document.getElementById('edit-cliente-id').value = cl.id;
     document.getElementById('edit-tipo').value = cl.tipo || 'suscripcion';
     document.getElementById('edit-estado').value = cl.estado || 'activo';
-    document.getElementById('edit-fee').value = cl.fee_mensual || '';
-    document.getElementById('edit-facturacion').value = cl.fecha_facturacion || '';
+    document.getElementById('edit-responsable').value = cl.responsable_id || '';
+    const feeEl = document.getElementById('edit-fee');
+    if (feeEl) feeEl.value = cl.fee_mensual || '';
+    const facEl = document.getElementById('edit-facturacion');
+    if (facEl) facEl.value = cl.fecha_facturacion || '';
     document.getElementById('edit-servicios').value = cl.servicios || '';
     document.getElementById('edit-contacto').value = cl.contacto_nombre || '';
     document.getElementById('edit-email').value = cl.contacto_email || '';
     document.getElementById('edit-telefono').value = cl.contacto_telefono || '';
-    document.getElementById('edit-estado-pago').value = cl.estado_pago || 'pendiente';
+    const epEl = document.getElementById('edit-estado-pago');
+    if (epEl) epEl.value = cl.estado_pago || 'pendiente';
     document.getElementById('edit-url-dashboard').value = cl.url_dashboard || '';
     document.getElementById('edit-notas').value = cl.notas || '';
     openModal('cliente');
@@ -363,4 +383,140 @@ async function renderCalendar() {
     }
 
     grid.innerHTML = html;
+}
+
+// ── Admin: Permisos ─────────────────────────────────────────────────────────
+async function togglePermiso(userId, seccion, el) {
+    const r = await apiPost('toggle_permiso', { user_id: userId, seccion });
+    if (r.ok) {
+        el.textContent = r.permitido ? '✅' : '❌';
+        el.title = `${userId} — ${seccion}: ${r.permitido ? 'Permitido' : 'Bloqueado'}`;
+    }
+}
+
+// ── Ficha de Cliente ────────────────────────────────────────────────────────
+let currentFichaSlug = null;
+
+async function loadFichaCliente(slug) {
+    currentFichaSlug = slug;
+    const container = document.getElementById('ficha-content');
+    container.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+
+    try {
+        const r = await fetch(`api/data.php?action=ficha_cliente&slug=${slug}`);
+        const data = await r.json();
+        if (!data.ok) { container.innerHTML = '<div class="empty-state"><h3>Error cargando ficha</h3></div>'; return; }
+
+        const f = data.ficha;
+        const plan = data.plan;
+        const precioCustom = data.precio_custom;
+
+        document.getElementById('ficha-title').textContent = f.nombre || slug;
+        document.getElementById('ficha-subtitle').textContent = 'Actualizado: ' + (f.ultima_actualizacion || '-');
+
+        let html = '';
+
+        // Info cards
+        html += '<div class="kpi-grid" style="margin-bottom:1.5rem">';
+        const infoFields = Object.entries(f.info).filter(([k]) => k && k !== 'Detalle' && !k.startsWith('-'));
+        infoFields.forEach(([key, val]) => {
+            html += '<div class="kpi-card"><div class="kpi-label">' + esc(key) + '</div><div class="kpi-value" style="font-size:1rem">' + esc(val) + '</div></div>';
+        });
+        if (f.etapa) {
+            html += '<div class="kpi-card"><div class="kpi-label">Etapa</div><div class="kpi-value" style="font-size:1rem">' + esc(f.etapa) + '</div></div>';
+        }
+        if (f.estado_pagos) {
+            const isPending = f.estado_pagos.toLowerCase().includes('debe');
+            html += '<div class="kpi-card" style="border-color:' + (isPending ? 'var(--danger)' : 'var(--success)') + '"><div class="kpi-label">Estado de Pagos</div><div class="kpi-value" style="font-size:0.9rem;color:' + (isPending ? 'var(--danger)' : 'var(--success)') + '">' + esc(f.estado_pagos.replace(/\*\*/g, '')) + '</div></div>';
+        }
+        if (plan) {
+            html += '<div class="kpi-card kpi-highlight"><div class="kpi-label">Plan</div><div class="kpi-value" style="font-size:1rem">' + esc(plan.nombre) + '</div><div class="kpi-detail">' + esc(precioCustom || plan.precio) + '</div></div>';
+        }
+        html += '</div>';
+
+        // Grid: Servicios + Herramientas
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">';
+        if (f.servicios && f.servicios.length) {
+            html += '<div class="section"><div class="section-header"><h2>Servicios Contratados</h2></div><ul style="list-style:none;padding:0">';
+            f.servicios.forEach(function(s) {
+                html += '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.5rem"><span style="color:var(--success);font-weight:700">✓</span> ' + esc(s) + '</li>';
+            });
+            html += '</ul></div>';
+        }
+        if (f.herramientas && f.herramientas.length) {
+            html += '<div class="section"><div class="section-header"><h2>Herramientas</h2></div><div class="client-services" style="gap:0.5rem">';
+            f.herramientas.forEach(function(h) {
+                html += '<span class="service-tag" style="padding:0.4rem 0.8rem;font-size:0.78rem">' + esc(h) + '</span>';
+            });
+            html += '</div></div>';
+        }
+        html += '</div>';
+
+        // Equipo
+        if (f.equipo && f.equipo.length) {
+            html += '<div class="section"><div class="section-header"><h2>Equipo Asignado</h2></div><div class="team-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">';
+            f.equipo.forEach(function(e) {
+                html += '<div class="team-card"><div class="team-info"><h3>' + esc(e.persona) + '</h3><div class="team-role">' + esc(e.rol) + '</div><div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem">' + esc(e.acceso) + '</div></div></div>';
+            });
+            html += '</div></div>';
+        }
+
+        // Plan scope
+        if (plan) {
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">';
+            html += '<div class="section"><div class="section-header"><h2>Incluido en el Plan</h2></div><ul style="list-style:none;padding:0">';
+            plan.incluye.forEach(function(i) {
+                html += '<li style="padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem"><span style="color:var(--success)">✓</span> ' + esc(i) + '</li>';
+            });
+            html += '</ul></div>';
+            html += '<div class="section"><div class="section-header"><h2>No Incluido</h2></div><ul style="list-style:none;padding:0">';
+            plan.no_incluye.forEach(function(i) {
+                html += '<li style="padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;color:var(--text-secondary)"><span style="color:var(--danger)">✕</span> ' + esc(i) + '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        // Pendientes
+        if ((f.pendientes && f.pendientes.length) || (f.pendientes_done && f.pendientes_done.length)) {
+            html += '<div class="section"><div class="section-header"><h2>Pendientes</h2></div><ul style="list-style:none;padding:0">';
+            if (f.pendientes) f.pendientes.forEach(function(p) {
+                var isUrgent = p.toLowerCase().indexOf('cobrar') >= 0 || p.toLowerCase().indexOf('debe') >= 0;
+                html += '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);' + (isUrgent ? 'color:var(--danger);font-weight:600' : '') + '"><span style="color:var(--warning)">○</span> ' + esc(p) + '</li>';
+            });
+            if (f.pendientes_done) f.pendientes_done.forEach(function(p) {
+                html += '<li style="padding:0.4rem 0;border-bottom:1px solid var(--border);color:var(--text-muted);text-decoration:line-through;font-size:0.82rem"><span style="color:var(--success)">✓</span> ' + esc(p) + '</li>';
+            });
+            html += '</ul></div>';
+        }
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = '<div class="empty-state"><h3>Error de conexión</h3></div>';
+    }
+}
+
+function downloadFicha() {
+    if (currentFichaSlug) window.open('ficha-pdf.php?cliente=' + currentFichaSlug, '_blank');
+}
+
+function downloadServicio() {
+    if (currentFichaSlug) window.open('servicio-pdf.php?cliente=' + currentFichaSlug, '_blank');
+}
+
+function esc(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ── Herramientas ────────────────────────────────────────────────────────────
+async function toggleHerramienta(id, estadoActual, el) {
+    const r = await apiPost('toggle_herramienta', { id, estado_actual: estadoActual });
+    if (r.ok) {
+        const icons = { configurado: '✅', no_aplica: '➖', pendiente: '⬜' };
+        el.textContent = icons[r.nuevo_estado] || '⬜';
+        el.setAttribute('onclick', `toggleHerramienta(${id}, '${r.nuevo_estado}', this)`);
+    }
 }
