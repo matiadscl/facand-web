@@ -224,5 +224,6 @@ function getClientesPlanMap(): array {
         'nuba' => ['plan' => null, 'precio_custom' => 'Pendiente (transición)'],
         'asfae' => ['plan' => null, 'precio_custom' => '$1.190.000 (abr) + $175.000/mes (may-nov)'],
         'awa' => ['plan' => 'google_ads', 'precio_custom' => '$100.000/mes (Google Ads + sitio web)'],
+        'rapid-transfer' => ['plan' => null, 'precio_custom' => '$30.000/mes (subcuenta GHL)'],
     ];
 }
