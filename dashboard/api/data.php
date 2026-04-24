@@ -84,11 +84,11 @@ switch ($action) {
     // ---- CRM ----
     case 'get_client':
         $id = input_int('id');
-        $client = query_one('SELECT c.*,
+        $client = query_one('SELECT c.*, e.nombre as responsable_nombre,
             (SELECT COUNT(*) FROM proyectos WHERE cliente_id = c.id AND estado = "activo") as proyectos_activos,
             (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes,
             (SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE cliente_id = c.id AND estado IN ("pendiente","parcial")) as deuda_pendiente
-            FROM clientes c WHERE c.id = ?', [$id]);
+            FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id WHERE c.id = ?', [$id]);
         $client ? respond($client) : fail('Cliente no encontrado');
         break;
 
