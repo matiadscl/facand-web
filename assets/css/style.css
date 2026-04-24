@@ -456,18 +456,100 @@ ul { list-style: none; }
 
 /* ===== FOOTER ===== */
 .footer {
-  border-top: 1px solid rgba(255,255,255,0.05);
-  padding: 48px 0;
-  text-align: center;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 64px 0 0;
+  background: var(--bg-card);
 }
+
+.footer__inner {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 48px;
+  padding-bottom: 48px;
+}
+
+.footer__brand { max-width: 320px; }
 
 .footer__logo {
   height: 36px;
-  margin: 0 auto 16px;
+  margin-bottom: 16px;
 }
 
-.footer p {
-  font-size: 13px;
+.footer__tagline {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+
+.footer__social {
+  display: flex;
+  gap: 12px;
+}
+
+.footer__social a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.footer__social a:hover {
+  background: var(--primary);
+  color: #000;
+}
+
+.footer__nav h4 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.footer__nav a {
+  display: block;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  transition: color 0.2s;
+}
+
+.footer__nav a:hover { color: var(--primary); }
+
+.footer__login-link {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: rgba(65, 215, 126, 0.1);
+  border: 1px solid rgba(65, 215, 126, 0.2);
+  border-radius: 6px;
+  font-weight: 600;
+  display: inline-block !important;
+  transition: all 0.2s;
+}
+
+.footer__login-link:hover {
+  background: var(--primary);
+  color: #000 !important;
+  border-color: var(--primary);
+}
+
+.footer__bottom {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer__bottom p {
+  font-size: 12px;
   color: var(--text-gray);
 }
 
@@ -711,6 +793,19 @@ ul { list-style: none; }
 
   .portfolio__grid {
     grid-template-columns: 1fr;
+  }
+
+  .footer__inner {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  .footer__brand { max-width: 100%; grid-column: 1 / -1; }
+
+  .footer__bottom {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
   }
 
   .section { padding: 60px 0; }
