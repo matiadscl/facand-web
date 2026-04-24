@@ -393,6 +393,79 @@ switch ($action) {
         respond(['created' => $created, 'skipped' => $skipped]);
         break;
 
+    // ---- ARCHIVOS DE FACTURA ----
+    case 'upload_invoices':
+        if (!can_edit($user_id, 'billing')) fail('Sin permiso');
+        $cliente_id = input_int('cliente_id');
+        if (!$cliente_id) fail('Cliente obligatorio');
+        $factura_id = input_int_null('factura_id');
+        $servicio = input('servicio');
+        $notas = input('notas');
+
+        if (empty($_FILES['archivos']) && empty($_FILES['archivos_'])) fail('No se recibieron archivos');
+        $files = $_FILES['archivos'] ?? $_FILES['archivos_'];
+        $upload_dir = __DIR__ . '/../uploads/facturas/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
+        $uploaded = 0;
+        $count = is_array($files['name']) ? count($files['name']) : 1;
+
+        for ($i = 0; $i < $count; $i++) {
+            $name = is_array($files['name']) ? $files['name'][$i] : $files['name'];
+            $tmp = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
+            $error = is_array($files['error']) ? $files['error'][$i] : $files['error'];
+            $size = is_array($files['size']) ? $files['size'][$i] : $files['size'];
+
+            if ($error !== UPLOAD_ERR_OK) continue;
+            if ($size > 10 * 1024 * 1024) continue; // max 10MB
+
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            if (!in_array($ext, ['pdf', 'png', 'jpg', 'jpeg', 'xml'])) continue;
+
+            $safe_name = date('Ymd_His') . '_' . $uploaded . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
+            $dest = $upload_dir . $safe_name;
+
+            if (move_uploaded_file($tmp, $dest)) {
+                db_execute("INSERT INTO archivos_factura (factura_id, cliente_id, nombre_archivo, ruta, servicio, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+                    [$factura_id, $cliente_id, $name, 'uploads/facturas/' . $safe_name, $servicio, $notas]);
+                $uploaded++;
+            }
+        }
+
+        if ($uploaded === 0) fail('No se pudo subir ningun archivo');
+        log_activity('billing', "Subidos $uploaded archivos para cliente ID:$cliente_id", $cliente_id);
+        respond(['uploaded' => $uploaded]);
+        break;
+
+    case 'get_invoice_files':
+        $cliente_id = input_int('cliente_id');
+        $factura_id = input_int('factura_id');
+        $where = '1=1';
+        $params = [];
+        if ($cliente_id) { $where .= ' AND af.cliente_id = ?'; $params[] = $cliente_id; }
+        if ($factura_id) { $where .= ' AND af.factura_id = ?'; $params[] = $factura_id; }
+        $files = query_all("SELECT af.*, c.nombre as cliente_nombre, f.numero as factura_numero
+            FROM archivos_factura af
+            LEFT JOIN clientes c ON af.cliente_id = c.id
+            LEFT JOIN facturas f ON af.factura_id = f.id
+            WHERE $where ORDER BY af.created_at DESC", $params);
+        respond($files);
+        break;
+
+    case 'delete_invoice_file':
+        if (!can_edit($user_id, 'billing')) fail('Sin permiso');
+        $id = input_int('id');
+        $file = query_one('SELECT ruta FROM archivos_factura WHERE id = ?', [$id]);
+        if ($file) {
+            $path = __DIR__ . '/../' . $file['ruta'];
+            if (file_exists($path)) unlink($path);
+            db_execute('DELETE FROM archivos_factura WHERE id = ?', [$id]);
+            respond();
+        } else {
+            fail('Archivo no encontrado');
+        }
+        break;
+
     default:
         fail('Acción no reconocida: ' . $action);
 }

@@ -123,6 +123,19 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
     </table>
 </div>
 
+<!-- Archivos adjuntos -->
+<div class="table-container" style="margin-top:20px;">
+    <div class="table-header">
+        <span class="table-title">Archivos Adjuntos</span>
+        <?php if (can_edit($current_user['id'], 'billing')): ?>
+            <button class="btn btn-primary btn-sm" onclick="openUploadModal()">Adjuntar Facturas</button>
+        <?php endif; ?>
+    </div>
+    <div id="archivosContainer">
+        <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem;">Cargando archivos...</div>
+    </div>
+</div>
+
 <div style="margin-top:16px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px; font-size:.8rem; color:var(--text-muted);">
     <strong>Automatización:</strong> Al emitir una factura se genera automáticamente una Cuenta por Cobrar. Al registrar pagos en Cuentas por Cobrar, se actualiza el estado de la factura y se registra el ingreso en Finanzas.
 </div>
@@ -216,4 +229,156 @@ async function generateMonthlyBilling() {
         refreshPage();
     }
 }
+
+// ---- Archivos adjuntos ----
+
+// Cargar servicios al seleccionar cliente
+function onUploadClientChange(select) {
+    const clienteId = select.value;
+    const serviciosDiv = document.getElementById('uploadServicios');
+    if (!clienteId) { serviciosDiv.innerHTML = ''; return; }
+
+    // Buscar servicios del cliente via API
+    API.get('get_client', { id: clienteId }).then(res => {
+        if (!res || !res.data.servicios) { serviciosDiv.innerHTML = ''; return; }
+        const svcs = res.data.servicios.split(',').map(s => s.trim()).filter(s => s);
+        if (svcs.length === 0) { serviciosDiv.innerHTML = '<span style="font-size:.8rem;color:var(--text-muted)">Sin servicios registrados</span>'; return; }
+        serviciosDiv.innerHTML = '<label class="form-label">Asociar a servicio</label><select name="servicio" class="form-select">' +
+            '<option value="">General (sin servicio específico)</option>' +
+            svcs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('') +
+            '</select>';
+    });
+}
+
+function openUploadModal() {
+    // Opciones de facturas existentes
+    const facturasOpts = <?= json_encode(array_map(fn($f) => ['id' => $f['id'], 'num' => $f['numero'], 'cliente' => $f['cliente_nombre']], $facturas)) ?>;
+    let facturaOptions = '<option value="">Sin asociar a factura</option>';
+    facturasOpts.forEach(f => {
+        facturaOptions += `<option value="${f.id}">${escHtml(f.num)} — ${escHtml(f.cliente)}</option>`;
+    });
+
+    const body = `
+    <form id="frmUpload" enctype="multipart/form-data" style="display:grid;gap:16px;">
+        <div class="form-group">
+            <label class="form-label">Archivos PDF (puedes seleccionar varios)</label>
+            <input type="file" name="archivos" id="inputArchivos" multiple accept=".pdf,.png,.jpg,.jpeg,.xml"
+                style="padding:12px;background:var(--bg);border:2px dashed var(--border);border-radius:10px;color:var(--text);cursor:pointer;width:100%;font-size:.85rem;"
+                onchange="updateFileCount(this)">
+            <div id="fileCount" style="font-size:.75rem;color:var(--text-muted);margin-top:4px;"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Cliente</label>
+            <select name="cliente_id" class="form-select" required onchange="onUploadClientChange(this)">
+                <option value="">Seleccionar cliente...</option>
+                ${Object.entries(bClientesList).map(([id, name]) => '<option value="'+id+'">'+escHtml(name)+'</option>').join('')}
+            </select>
+        </div>
+        <div id="uploadServicios"></div>
+        <div class="form-group">
+            <label class="form-label">Asociar a factura (opcional)</label>
+            <select name="factura_id" class="form-select">${facturaOptions}</select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Notas (opcional)</label>
+            <textarea name="notas" class="form-textarea" rows="2" placeholder="Descripción o comentarios..."></textarea>
+        </div>
+    </form>`;
+
+    Modal.open('Adjuntar Facturas / Documentos', body,
+        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
+         <button class="btn btn-primary" onclick="uploadFiles()" id="btnUpload">Subir Archivos</button>`);
+}
+
+function updateFileCount(input) {
+    const count = input.files.length;
+    const totalSize = Array.from(input.files).reduce((s, f) => s + f.size, 0);
+    document.getElementById('fileCount').textContent = count > 0
+        ? `${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${(totalSize / 1024 / 1024).toFixed(1)} MB)`
+        : '';
+}
+
+async function uploadFiles() {
+    const form = document.getElementById('frmUpload');
+    const files = document.getElementById('inputArchivos').files;
+    const clienteId = form.querySelector('[name="cliente_id"]').value;
+
+    if (!files.length) { toast('Selecciona al menos un archivo', 'error'); return; }
+    if (!clienteId) { toast('Selecciona un cliente', 'error'); return; }
+
+    const btn = document.getElementById('btnUpload');
+    btn.disabled = true;
+    btn.textContent = 'Subiendo...';
+
+    const formData = new FormData();
+    formData.append('action', 'upload_invoices');
+    formData.append('csrf_token', APP.csrf);
+    formData.append('cliente_id', clienteId);
+    formData.append('factura_id', form.querySelector('[name="factura_id"]').value || '');
+    formData.append('servicio', form.querySelector('[name="servicio"]')?.value || '');
+    formData.append('notas', form.querySelector('[name="notas"]').value || '');
+
+    for (let i = 0; i < files.length; i++) {
+        formData.append('archivos[]', files[i]);
+    }
+
+    try {
+        const res = await fetch('api/data.php', { method: 'POST', body: formData });
+        const json = await res.json();
+        if (json.ok) {
+            toast(`${json.data.uploaded} archivo${json.data.uploaded > 1 ? 's' : ''} subido${json.data.uploaded > 1 ? 's' : ''} correctamente`);
+            Modal.close();
+            loadArchivos();
+        } else {
+            toast(json.error || 'Error al subir', 'error');
+        }
+    } catch (e) {
+        toast('Error de conexión', 'error');
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Subir Archivos';
+    }
+}
+
+async function loadArchivos() {
+    const container = document.getElementById('archivosContainer');
+    try {
+        const res = await fetch('api/data.php?action=get_invoice_files');
+        const json = await res.json();
+        if (!json.ok || !json.data.length) {
+            container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem;">Sin archivos adjuntos. Usa el boton "Adjuntar Facturas" para subir documentos.</div>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Archivo</th><th>Cliente</th><th>Factura</th><th>Servicio</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>';
+        json.data.forEach(f => {
+            const ext = f.nombre_archivo.split('.').pop().toLowerCase();
+            const icon = ext === 'pdf' ? '&#128196;' : (ext === 'xml' ? '&#128195;' : '&#128247;');
+            html += `<tr>
+                <td>${icon} <strong>${escHtml(f.nombre_archivo)}</strong></td>
+                <td>${escHtml(f.cliente_nombre || '-')}</td>
+                <td>${f.factura_numero ? escHtml(f.factura_numero) : '<span style="color:var(--text-muted)">-</span>'}</td>
+                <td>${f.servicio ? '<span class="badge status-info" style="font-size:.7rem">' + escHtml(f.servicio) + '</span>' : '-'}</td>
+                <td style="font-size:.8rem;color:var(--text-muted)">${escHtml(f.created_at || '-')}</td>
+                <td>
+                    <a href="${escHtml(f.ruta)}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>
+                    ${APP.canEdit ? '<button class="btn btn-danger btn-sm" onclick="deleteFile('+f.id+')">Eliminar</button>' : ''}
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:.85rem;">Error al cargar archivos</div>';
+    }
+}
+
+async function deleteFile(id) {
+    if (!confirmAction('¿Eliminar este archivo?')) return;
+    const res = await API.post('delete_invoice_file', { id });
+    if (res) { toast('Archivo eliminado'); loadArchivos(); }
+}
+
+// Cargar archivos al iniciar
+loadArchivos();
 </script>
