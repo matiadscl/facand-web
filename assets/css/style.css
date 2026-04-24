@@ -674,7 +674,8 @@ ul { list-style: none; }
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   .nav__links,
-  .nav__badge { display: none; }
+  .nav__badge,
+  .nav__login { display: none; }
 
   .nav__hamburger { display: block; }
 
