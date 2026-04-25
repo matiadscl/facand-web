@@ -200,8 +200,8 @@ foreach ($clientes as $c) {
             <div class="pipeline-card" onclick="openClientDetail(<?= $c['id'] ?>)" title="<?= safe($c['nombre']) ?>">
                 <div class="pipeline-card-name"><?= safe($c['nombre']) ?></div>
                 <div class="pipeline-card-sub"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
-                <?php if ($c['fee_mensual'] > 0): ?>
-                    <div style="font-size:.7rem;color:var(--success);margin-top:4px"><?= format_money($c['fee_mensual']) ?>/mes</div>
+                <?php $pipe_total = ($c['total_suscripcion'] ?? 0) + ($c['total_implementacion'] ?? 0); if ($pipe_total > 0): ?>
+                    <div style="font-size:.7rem;color:var(--success);margin-top:4px"><?= format_money($pipe_total) ?></div>
                 <?php endif; ?>
             </div>
             <?php endforeach; ?>
@@ -388,7 +388,7 @@ async function editClient(id) {
         ${formField('email', 'Email', 'email', c.email)}
         ${formField('telefono', 'Teléfono', 'text', c.telefono)}
         ${formField('plan', 'Plan', 'select', c.plan || '', {options: planesOpts})}
-        ${formField('fee_mensual', 'Suscripción ($)', 'number', c.fee_mensual)}
+        ${formField('fee_mensual', 'Suscripción ($) — editar en Servicios', 'number', c.fee_mensual)}
         ${formField('estado_pago', 'Estado Pago', 'select', c.estado_pago || 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
         ${formField('tipo', 'Tipo', 'select', c.tipo, {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo', cerrado:'Cerrado'}})}
         ${formField('etapa_pipeline', 'Pipeline', 'select', c.etapa_pipeline, {options: {lead:'Lead', contactado:'Contactado', propuesta:'Propuesta', negociacion:'Negociación', onboarding:'Onboarding', activo:'Activo', cerrado_ganado:'Cerrado Ganado', cerrado_perdido:'Cerrado Perdido'}})}

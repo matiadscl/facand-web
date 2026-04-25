@@ -4,14 +4,10 @@
  */
 
 $total_clientes    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo"') ?? 0;
-// Facturación proyectada = suscripciones activas + implementaciones activas (pendientes de facturar)
-$total_suscripciones   = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo = "suscripcion" AND estado = "activo"') ?? 0;
+// FUENTE ÚNICA: servicios_cliente (NUNCA fee_mensual de clientes)
+$total_suscripciones    = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo = "suscripcion" AND estado = "activo"') ?? 0;
 $total_implementaciones = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo IN ("implementacion","adicional") AND estado = "activo"') ?? 0;
-// Fallback: si no hay servicios registrados, usar fee_mensual de clientes
-if ($total_suscripciones == 0) {
-    $total_suscripciones = query_scalar('SELECT COALESCE(SUM(fee_mensual),0) FROM clientes WHERE tipo = "activo" AND estado_pago != "canje"') ?? 0;
-}
-$fee_mensual_total = $total_suscripciones + $total_implementaciones;
+$fee_mensual_total      = $total_suscripciones + $total_implementaciones;
 $pagos_vencidos    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND estado_pago = "vencido"') ?? 0;
 $tareas_pendientes = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso")') ?? 0;
 $tareas_atrasadas  = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso") AND fecha_limite < date("now") AND fecha_limite IS NOT NULL') ?? 0;
@@ -35,7 +31,9 @@ foreach (query_all('SELECT t.titulo, t.fecha_limite, c.nombre as cliente FROM ta
     $alertas[] = ['tipo' => 'warning', 'texto' => "Tarea atrasada: <strong>{$ta['titulo']}</strong> ({$ta['cliente']}) — " . days_overdue($ta['fecha_limite']) . " días"];
 }
 
-$clientes_recientes = query_all('SELECT nombre, plan, fee_mensual, etapa, estado_pago FROM clientes WHERE tipo = "activo" ORDER BY updated_at DESC LIMIT 8');
+$clientes_recientes = query_all('SELECT c.nombre, c.etapa, c.estado_pago,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = c.id AND estado = "activo") as total_servicios
+    FROM clientes c WHERE c.tipo = "activo" ORDER BY c.updated_at DESC LIMIT 8');
 $actividad = query_all('SELECT a.*, u.nombre as usuario FROM actividad a LEFT JOIN usuarios u ON a.usuario_id = u.id ORDER BY a.created_at DESC LIMIT 10');
 $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
 ?>
@@ -172,13 +170,12 @@ $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'
             <a href="?page=crm" class="btn btn-secondary btn-sm">Ver todos</a>
         </div>
         <table>
-            <thead><tr><th>Cliente</th><th>Plan</th><th>Suscripción</th><th>Pago</th></tr></thead>
+            <thead><tr><th>Cliente</th><th>Servicios activos</th><th>Pago</th></tr></thead>
             <tbody>
             <?php foreach ($clientes_recientes as $c): ?>
             <tr>
                 <td><strong><?= safe($c['nombre']) ?></strong></td>
-                <td><span class="badge status-info" style="font-size:.7rem"><?= safe($c['plan'] ?: 'Custom') ?></span></td>
-                <td style="font-weight:600"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) : '-' ?></td>
+                <td style="font-weight:600"><?= $c['total_servicios'] > 0 ? format_money($c['total_servicios']) : '-' ?></td>
                 <td><span class="badge <?= $c['estado_pago'] === 'pagado' ? 'status-success' : ($c['estado_pago'] === 'vencido' ? 'status-danger' : ($c['estado_pago'] === 'canje' ? 'status-muted' : 'status-warning')) ?>"><?= ucfirst($c['estado_pago']) ?></span></td>
             </tr>
             <?php endforeach; ?>
