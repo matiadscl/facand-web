@@ -41,6 +41,10 @@ if (!empty($presupuesto)) {
     $adsFormato = implode(' · ', $presupuesto);
 }
 
+// Monto pendiente de pago (desde cuentas por cobrar)
+$monto_pendiente = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE cliente_id = ? AND estado IN ("pendiente","parcial","vencido")', [$id]) ?? 0;
+$monto_pagado_total = query_scalar('SELECT COALESCE(SUM(monto_pagado),0) FROM cuentas_cobrar WHERE cliente_id = ?', [$id]) ?? 0;
+
 // Logo en base64 si existe (para impresión offline)
 $logoPath = __DIR__ . '/assets/img/logo.png';
 $logoSrc  = '';
@@ -392,10 +396,10 @@ body {
                 <div class="info-label">Suscripción mensual</div>
                 <div class="info-value big"><?= $feeFormato ?></div>
             </div>
-            <div class="info-box">
-                <div class="info-label">Estado de Pago</div>
-                <div class="info-value" style="margin-top:4px">
-                    <span class="badge-<?= htmlspecialchars($c['estado_pago'] ?? 'pendiente') ?>"><?= ucfirst($c['estado_pago'] ?? 'pendiente') ?></span>
+            <div class="info-box<?= $monto_pendiente > 0 ? ' accent' : '' ?>">
+                <div class="info-label">Pendiente de pago</div>
+                <div class="info-value<?= $monto_pendiente > 0 ? ' big' : '' ?>" style="<?= $monto_pendiente > 0 ? 'color:#c53030' : '' ?>">
+                    <?= $monto_pendiente > 0 ? '$' . number_format($monto_pendiente, 0, ',', '.') : 'Al día' ?>
                 </div>
             </div>
             <div class="info-box">
