@@ -47,7 +47,8 @@ $module_info = $all_modules[$page];
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
+        <div class="sidebar-header" style="display:flex;align-items:center;gap:10px;">
+            <img src="assets/img/logo.webp" alt="Facand" style="height:32px;width:auto;">
             <h2 class="sidebar-brand"><?= safe($app['name']) ?></h2>
         </div>
         <nav class="sidebar-nav">
