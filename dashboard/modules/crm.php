@@ -70,8 +70,8 @@ $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta
 </style>
 
 <?php
-// Agrupar clientes por etapa_pipeline para el kanban
-$pipeline_stages = ['lead'=>'Lead','contactado'=>'Contactado','propuesta'=>'Propuesta','negociacion'=>'Negociación','onboarding'=>'Onboarding','activo'=>'Activo','cerrado_ganado'=>'Cerrado Ganado','cerrado_perdido'=>'Cerrado Perdido'];
+// Pipeline: solo etapas comerciales (sin activo — los activos ya son cerrado_ganado)
+$pipeline_stages = ['lead'=>'Lead','contactado'=>'Contactado','propuesta'=>'Propuesta','negociacion'=>'Negociación','onboarding'=>'Onboarding'];
 $clientes_por_etapa = [];
 foreach ($pipeline_stages as $key => $_) $clientes_por_etapa[$key] = [];
 foreach ($clientes as $c) {
@@ -181,30 +181,29 @@ foreach ($clientes as $c) {
 
 <!-- Vista Pipeline (kanban) -->
 <div id="crmTabPipeline" class="crm-tab-content">
-    <div class="pipeline">
-        <?php foreach ($pipeline_stages as $stage_key => $stage_label):
-            $cards = $clientes_por_etapa[$stage_key];
-        ?>
+    <?php
+    // Filtrar solo etapas con clientes
+    $etapas_con_clientes = array_filter($clientes_por_etapa, fn($cards) => !empty($cards));
+    if (empty($etapas_con_clientes)): ?>
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Todos los clientes están cerrados. No hay prospectos en el pipeline.</div>
+    <?php else: ?>
+    <div class="pipeline" style="grid-template-columns:repeat(<?= count($etapas_con_clientes) ?>, 1fr);">
+        <?php foreach ($etapas_con_clientes as $stage_key => $cards): ?>
         <div class="pipeline-stage">
             <div class="pipeline-stage-header">
-                <span class="pipeline-stage-name"><?= $stage_label ?></span>
+                <span class="pipeline-stage-name"><?= $pipeline_stages[$stage_key] ?? ucfirst($stage_key) ?></span>
                 <span class="pipeline-stage-count"><?= count($cards) ?></span>
             </div>
             <?php foreach ($cards as $c): ?>
-            <div class="pipeline-card" onclick="openClientDetail(<?= $c['id'] ?>)" title="<?= safe($c['nombre']) ?>">
+            <div class="pipeline-card" onclick="openClientDetail(<?= $c['id'] ?>)">
                 <div class="pipeline-card-name"><?= safe($c['nombre']) ?></div>
                 <div class="pipeline-card-sub"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
-                <?php $pipe_total = ($c['total_suscripcion'] ?? 0) + ($c['total_implementacion'] ?? 0); if ($pipe_total > 0): ?>
-                    <div style="font-size:.7rem;color:var(--success);margin-top:4px"><?= format_money($pipe_total) ?></div>
-                <?php endif; ?>
             </div>
             <?php endforeach; ?>
-            <?php if (empty($cards)): ?>
-                <div style="font-size:.72rem;color:var(--text-muted);text-align:center;padding:12px 0">Sin clientes</div>
-            <?php endif; ?>
         </div>
         <?php endforeach; ?>
     </div>
+    <?php endif; ?>
 </div>
 
 <script>
