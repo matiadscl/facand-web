@@ -2,12 +2,31 @@
 /**
  * Módulo CRM — Clientes Facand
  */
-$clientes = query_all('SELECT c.*, e.nombre as responsable_nombre,
-    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes,
-    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = c.id AND tipo = "suscripcion" AND estado = "activo") as total_suscripcion,
-    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = c.id AND tipo IN ("implementacion","adicional") AND estado = "activo") as total_implementacion,
-    (SELECT COUNT(*) FROM servicios_cliente WHERE cliente_id = c.id AND estado = "activo") as servicios_activos
-    FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.nombre');
+// Mes seleccionado
+$meses_es = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio','07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
+$mes_sel = $_GET['mes'] ?? date('Y-m');
+$mes_num = substr($mes_sel, 5, 2);
+$mes_anio = substr($mes_sel, 0, 4);
+$mes_label = ($meses_es[$mes_num] ?? $mes_num) . ' ' . $mes_anio;
+$primer_dia = "$mes_sel-01";
+$ultimo_dia = date('Y-m-t', strtotime($primer_dia));
+$meses_selector = [];
+for ($i = -6; $i <= 2; $i++) {
+    $m = date('Y-m', strtotime("$i months"));
+    $meses_selector[$m] = $meses_es[substr($m, 5)] . ' ' . substr($m, 0, 4);
+}
+
+// Servicios vigentes en el mes para subqueries
+$sv_where = "AND sc.fecha_inicio <= '$ultimo_dia' AND (sc.fecha_fin IS NULL OR sc.fecha_fin >= '$primer_dia')";
+
+$clientes = query_all("SELECT c.*, e.nombre as responsable_nombre,
+    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ('pendiente','en_progreso')) as tareas_pendientes,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo = 'suscripcion' AND sc.estado = 'activo' $sv_where) as total_suscripcion,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo IN ('implementacion','adicional') AND sc.estado = 'activo' $sv_where) as total_implementacion,
+    (SELECT COUNT(*) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.estado = 'activo' $sv_where) as servicios_activos
+    FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id
+    WHERE c.created_at <= '$ultimo_dia'
+    ORDER BY c.nombre");
 $equipo_list = query_all('SELECT id, nombre FROM equipo WHERE activo = 1 ORDER BY nombre');
 $activos = count(array_filter($clientes, fn($c) => $c['tipo'] === 'activo'));
 // Suscripción total desde servicios_cliente (no fee_mensual)
@@ -82,6 +101,17 @@ foreach ($clientes as $c) {
     // Si la etapa no está en el pipeline (ej: cerrado_ganado), no se muestra
 }
 ?>
+
+<!-- Selector de mes -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <a href="?page=crm&mes=<?= date('Y-m', strtotime("$mes_sel-01 -1 month")) ?>" class="btn btn-secondary btn-sm">← Anterior</a>
+    <select class="form-select" style="font-size:.9rem;font-weight:600;min-width:180px;" onchange="location.href='?page=crm&mes='+this.value">
+        <?php foreach ($meses_selector as $mv => $ml): ?>
+            <option value="<?= $mv ?>" <?= $mv === $mes_sel ? 'selected' : '' ?>><?= $ml ?></option>
+        <?php endforeach; ?>
+    </select>
+    <a href="?page=crm&mes=<?= date('Y-m', strtotime("$mes_sel-01 +1 month")) ?>" class="btn btn-secondary btn-sm">Siguiente →</a>
+</div>
 
 <div class="crm-kpis">
     <div class="crm-kpi" style="border-left:3px solid var(--accent)"><div class="crm-kpi-label">Clientes Activos</div><div class="crm-kpi-val"><?= $activos ?></div></div>

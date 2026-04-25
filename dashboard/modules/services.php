@@ -28,8 +28,22 @@ $filtro_tipo    = $_GET['tipo_servicio'] ?? '';
 $filtro_estado  = $_GET['estado_servicio'] ?? '';
 $filtro_pres    = $_GET['estado_presupuesto'] ?? '';
 
-// ---- Servicios ----
-$where = '1=1';
+// Mes seleccionado (default: mes actual)
+$meses_es = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio','07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
+$mes_sel = $_GET['mes'] ?? date('Y-m');
+$mes_num = substr($mes_sel, 5, 2);
+$mes_anio = substr($mes_sel, 0, 4);
+$mes_label = ($meses_es[$mes_num] ?? $mes_num) . ' ' . $mes_anio;
+$primer_dia = "$mes_sel-01";
+$ultimo_dia = date('Y-m-t', strtotime($primer_dia));
+$meses_selector = [];
+for ($i = -6; $i <= 2; $i++) {
+    $m = date('Y-m', strtotime("$i months"));
+    $meses_selector[$m] = $meses_es[substr($m, 5)] . ' ' . substr($m, 0, 4);
+}
+
+// ---- Servicios (vigentes en el mes seleccionado) ----
+$where = "s.fecha_inicio <= '$ultimo_dia' AND (s.fecha_fin IS NULL OR s.fecha_fin >= '$primer_dia')";
 $params = [];
 if ($filtro_tipo)   { $where .= ' AND s.tipo = ?';   $params[] = $filtro_tipo; }
 if ($filtro_estado) { $where .= ' AND s.estado = ?'; $params[] = $filtro_estado; }
@@ -53,11 +67,12 @@ $presupuestos = query_all("SELECT p.*, c.nombre as cliente_nombre
 
 $clientes_list = query_all('SELECT id, nombre FROM clientes WHERE tipo IN ("activo","prospecto") ORDER BY nombre');
 
-// KPIs servicios
-$total_activos     = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
-$ingreso_total     = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
-$total_pausados    = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "pausado"') ?? 0;
-$ingreso_pausado   = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "pausado"') ?? 0;
+// KPIs servicios (filtrados por mes)
+$mes_where = "fecha_inicio <= '$ultimo_dia' AND (fecha_fin IS NULL OR fecha_fin >= '$primer_dia')";
+$total_activos     = query_scalar("SELECT COUNT(*) FROM servicios_cliente WHERE estado = 'activo' AND $mes_where") ?? 0;
+$ingreso_total     = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = 'activo' AND $mes_where") ?? 0;
+$total_pausados    = query_scalar("SELECT COUNT(*) FROM servicios_cliente WHERE estado = 'pausado' AND $mes_where") ?? 0;
+$ingreso_pausado   = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = 'pausado' AND $mes_where") ?? 0;
 
 // KPIs presupuestos
 $pres_enviados  = query_scalar('SELECT COUNT(*) FROM presupuestos WHERE estado = "enviado"') ?? 0;
@@ -93,6 +108,17 @@ for ($i = 0; $i < 3; $i++) {
     $meses_proyeccion[] = ['mes' => $mes, 'label' => $mes_label, 'monto' => $subs + $impl, 'subs' => $subs, 'impl' => $impl, 'desglose' => $desglose];
 }
 ?>
+
+<!-- Selector de mes -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <a href="?page=services&tab=<?= $tab_activo ?>&mes=<?= date('Y-m', strtotime("$mes_sel-01 -1 month")) ?>" class="btn btn-secondary btn-sm">← Anterior</a>
+    <select class="form-select" style="font-size:.9rem;font-weight:600;min-width:180px;" onchange="location.href='?page=services&tab=<?= $tab_activo ?>&mes='+this.value">
+        <?php foreach ($meses_selector as $mv => $ml): ?>
+            <option value="<?= $mv ?>" <?= $mv === $mes_sel ? 'selected' : '' ?>><?= $ml ?></option>
+        <?php endforeach; ?>
+    </select>
+    <a href="?page=services&tab=<?= $tab_activo ?>&mes=<?= date('Y-m', strtotime("$mes_sel-01 +1 month")) ?>" class="btn btn-secondary btn-sm">Siguiente →</a>
+</div>
 
 <div class="kpi-grid">
     <div class="kpi-card" style="border-left:3px solid var(--primary)"><div class="kpi-label">Servicios Activos</div><div class="kpi-value"><?= $total_activos ?></div></div>
