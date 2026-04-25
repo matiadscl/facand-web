@@ -53,8 +53,9 @@ if ($filtro_estado) { $where .= ' AND s.estado = ?'; $params[] = $filtro_estado;
 
 $servicios = query_all("SELECT s.*, c.nombre as cliente_nombre,
     CASE
-        WHEN s.fecha_fin IS NOT NULL AND s.fecha_fin < '$primer_dia' THEN s.estado
-        WHEN s.fecha_inicio > '$ultimo_dia' THEN 'futuro'
+        WHEN s.fecha_pausa IS NOT NULL AND s.fecha_pausa <= '$ultimo_dia'
+             AND (s.fecha_reanudacion IS NULL OR s.fecha_reanudacion > '$ultimo_dia') THEN 'pausado'
+        WHEN s.estado = 'cancelado' THEN 'cancelado'
         ELSE 'activo'
     END as estado_mes
     FROM servicios_cliente s
@@ -360,6 +361,13 @@ async function editService(id) {
         ${formField('estado', 'Estado', 'select', s.estado, {options: {activo:'Activo', pausado:'Pausado', finalizado:'Finalizado', cancelado:'Cancelado'}})}
         ${formField('fecha_inicio', 'Fecha inicio', 'date', s.fecha_inicio || '')}
         ${formField('fecha_fin', 'Fecha fin', 'date', s.fecha_fin || '')}
+        <div class="form-group full-width" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+            <label class="form-label" style="font-size:.75rem;color:var(--text-muted);">Período de pausa (opcional)</label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group"><label class="form-label">Pausado desde</label><input type="date" name="fecha_pausa" class="form-input" value="${s.fecha_pausa || ''}"></div>
+            <div class="form-group"><label class="form-label">Reanuda en</label><input type="date" name="fecha_reanudacion" class="form-input" value="${s.fecha_reanudacion || ''}"></div>
+        </div>
         ${formField('notas', 'Notas', 'textarea', s.notas, {fullWidth: true})}
     </form>`;
     Modal.open('Editar Servicio', body,

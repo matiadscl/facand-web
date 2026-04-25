@@ -177,12 +177,16 @@ $next_num = 'F-' . str_pad(intval(preg_replace('/\D/', '', $last_num)) + 1, 4, '
                     $estado_label = 'A tiempo';
                 }
 
+                // Detectar si el servicio estaba pausado en este mes
+                $sv_pausado = $sv['fecha_pausa'] && $sv['fecha_pausa'] <= $ultimo_dia
+                    && (!$sv['fecha_reanudacion'] || $sv['fecha_reanudacion'] > $ultimo_dia);
+
                 $tipo_label = $sv['tipo'] === 'suscripcion' ? 'Suscripción' : ($sv['tipo'] === 'implementacion' ? 'Implementación' : 'Adicional');
                 $tipo_class = $sv['tipo'] === 'suscripcion' ? 'status-info' : ($sv['tipo'] === 'implementacion' ? 'status-warning' : 'status-muted');
             ?>
             <tr>
                 <td><strong><?= safe($sv['cliente_nombre']) ?></strong></td>
-                <td style="font-size:.82rem;"><?= safe($sv['nombre']) ?></td>
+                <td style="font-size:.82rem;"><?= safe($sv['nombre']) ?><?php if ($sv_pausado): ?> <span class="badge status-warning" style="font-size:.6rem;">Pausado</span><?php endif; ?></td>
                 <td><span class="badge <?= $tipo_class ?>" style="font-size:.68rem;"><?= $tipo_label ?></span></td>
                 <td style="font-weight:600;"><?= format_money($sv['monto']) ?><?= $sv['tipo'] === 'suscripcion' ? '<span style="font-size:.7rem;color:var(--text-muted)">/mes</span>' : '' ?></td>
                 <td><span class="badge <?= $estado_class ?>"><?= $estado_label ?></span></td>

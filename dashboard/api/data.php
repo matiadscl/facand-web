@@ -279,8 +279,20 @@ switch ($action) {
     case 'update_service':
         if (!can_edit($user_id, 'services')) fail('Sin permiso');
         $id = input_int('id');
-        db_execute('UPDATE servicios_cliente SET cliente_id=?, nombre=?, tipo=?, monto=?, estado=?, fecha_inicio=?, fecha_fin=?, notas=?, updated_at=datetime("now") WHERE id=?',
-            [input_int('cliente_id'), input('nombre'), input('tipo'), input_int('monto'), input('estado'), input('fecha_inicio') ?: null, input('fecha_fin') ?: null, input('notas'), $id]);
+        $estado = input('estado');
+        $fecha_pausa = input('fecha_pausa') ?: null;
+        $fecha_reanudacion = input('fecha_reanudacion') ?: null;
+
+        // Si cambia a pausado y no tiene fecha_pausa, usar hoy
+        if ($estado === 'pausado' && !$fecha_pausa) $fecha_pausa = date('Y-m-d');
+        // Si cambia a activo y tenía pausa sin reanudacion, cerrar la pausa
+        if ($estado === 'activo') {
+            $prev = query_one('SELECT estado, fecha_pausa FROM servicios_cliente WHERE id = ?', [$id]);
+            if ($prev && $prev['fecha_pausa'] && !$fecha_reanudacion) $fecha_reanudacion = date('Y-m-d');
+        }
+
+        db_execute('UPDATE servicios_cliente SET cliente_id=?, nombre=?, tipo=?, monto=?, estado=?, fecha_inicio=?, fecha_fin=?, fecha_pausa=?, fecha_reanudacion=?, notas=?, updated_at=datetime("now") WHERE id=?',
+            [input_int('cliente_id'), input('nombre'), input('tipo'), input_int('monto'), $estado, input('fecha_inicio') ?: null, input('fecha_fin') ?: null, $fecha_pausa, $fecha_reanudacion, input('notas'), $id]);
         log_activity('services', 'Servicio actualizado: ' . input('nombre'));
         respond();
         break;
