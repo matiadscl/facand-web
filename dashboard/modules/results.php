@@ -8,11 +8,27 @@
 // Todos los movimientos para calcular EERR
 $movimientos = query_all('SELECT tipo, categoria, subcategoria, monto, fecha, fecha_contable FROM finanzas ORDER BY fecha');
 $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
+
+// Balance: datos para la pestaña
+$balance_cxc = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido")') ?? 0;
+$balance_favor = query_scalar("SELECT COALESCE(SUM(CASE WHEN tipo='pago' THEN monto ELSE 0 END) - SUM(CASE WHEN tipo IN ('factura','gasto_ads','ajuste') THEN monto ELSE 0 END), 0) FROM cuenta_corriente") ?? 0;
+$balance_favor = max(0, $balance_favor); // solo si es positivo (a favor del cliente)
+$balance_ingresos_total = query_scalar('SELECT COALESCE(SUM(monto),0) FROM finanzas WHERE tipo = "ingreso"') ?? 0;
+$balance_gastos_total = query_scalar('SELECT COALESCE(SUM(monto),0) FROM finanzas WHERE tipo = "gasto"') ?? 0;
+$balance_resultado_acum = $balance_ingresos_total - $balance_gastos_total;
 ?>
 
+<!-- Tabs principales -->
+<div class="tabs" style="margin-bottom:20px;">
+    <button class="tab active" data-tab="tab-eerr">Estado de Resultados</button>
+    <button class="tab" data-tab="tab-balance">Balance</button>
+</div>
+
+<!-- TAB EERR -->
+<div class="tab-content active" data-tab-content="tab-eerr">
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-    <span style="font-size:.82rem;color:var(--text-muted);">Vista:</span>
-    <button class="btn btn-primary btn-sm" id="btnEERR" onclick="setMode('eerr')">Estado de Resultados</button>
+    <span style="font-size:.82rem;color:var(--text-muted);">Modo:</span>
+    <button class="btn btn-primary btn-sm" id="btnEERR" onclick="setMode('eerr')">Contable</button>
     <button class="btn btn-secondary btn-sm" id="btnFC" onclick="setMode('fc')">Flujo de Caja</button>
     <span style="font-size:.72rem;color:var(--text-muted);margin-left:auto;" id="modeHint">Usando fecha contable</span>
 </div>
@@ -33,6 +49,63 @@ $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'
     <div class="chart-title">Evolución de Ingresos</div>
     <div id="incomeChart" class="bar-chart"></div>
 </div>
+</div><!-- /tab-eerr -->
+
+<!-- TAB BALANCE -->
+<div class="tab-content" data-tab-content="tab-balance">
+    <div style="max-width:600px;">
+        <div class="table-container" style="margin-bottom:20px;">
+            <div class="table-header"><span class="table-title">Balance Simplificado</span></div>
+            <table>
+                <thead><tr><th>Concepto</th><th style="text-align:right">Monto</th></tr></thead>
+                <tbody>
+                    <tr style="font-weight:700;background:var(--bg);"><td colspan="2" style="padding:10px 14px;">ACTIVOS</td></tr>
+                    <tr>
+                        <td style="padding-left:24px;">Cuentas por cobrar</td>
+                        <td style="text-align:right;font-weight:600;"><?= format_money($balance_cxc) ?></td>
+                    </tr>
+                    <tr>
+                        <td style="padding-left:24px;">Resultado acumulado</td>
+                        <td style="text-align:right;font-weight:600;color:<?= $balance_resultado_acum >= 0 ? 'var(--success)' : 'var(--danger)' ?>"><?= format_money($balance_resultado_acum) ?></td>
+                    </tr>
+                    <tr style="font-weight:700;border-top:2px solid var(--border);">
+                        <td>Total Activos</td>
+                        <td style="text-align:right;color:var(--success)"><?= format_money($balance_cxc + max(0, $balance_resultado_acum)) ?></td>
+                    </tr>
+
+                    <tr style="font-weight:700;background:var(--bg);"><td colspan="2" style="padding:10px 14px;">PASIVOS</td></tr>
+                    <tr>
+                        <td style="padding-left:24px;">Saldos a favor clientes</td>
+                        <td style="text-align:right;font-weight:600;color:var(--warning)"><?= format_money($balance_favor) ?></td>
+                    </tr>
+                    <tr style="font-size:.72rem;color:var(--text-muted);">
+                        <td style="padding-left:32px;">Fondos comprometidos para inversión publicitaria</td>
+                        <td></td>
+                    </tr>
+                    <tr style="font-weight:700;border-top:2px solid var(--border);">
+                        <td>Total Pasivos</td>
+                        <td style="text-align:right;color:var(--warning)"><?= format_money($balance_favor) ?></td>
+                    </tr>
+
+                    <tr style="font-weight:700;background:var(--bg);"><td colspan="2" style="padding:10px 14px;">PATRIMONIO</td></tr>
+                    <?php $patrimonio = ($balance_cxc + max(0, $balance_resultado_acum)) - $balance_favor; ?>
+                    <tr>
+                        <td style="padding-left:24px;">Activos - Pasivos</td>
+                        <td style="text-align:right;font-weight:700;font-size:1.1rem;color:<?= $patrimonio >= 0 ? 'var(--success)' : 'var(--danger)' ?>"><?= format_money($patrimonio) ?></td>
+                    </tr>
+                    <tr style="font-size:.72rem;color:var(--text-muted);">
+                        <td style="padding-left:32px;">Lo que es realmente de la empresa</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:.72rem;color:var(--text-muted);">
+            Este balance es simplificado — no incluye activos fijos, inventario ni obligaciones tributarias. Para contabilidad formal, consulta a tu contador.
+        </div>
+    </div>
+</div><!-- /tab-balance -->
 
 <script>
 const allMov = <?= json_encode($movimientos) ?>;

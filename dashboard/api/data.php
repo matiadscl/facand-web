@@ -316,6 +316,37 @@ switch ($action) {
         respond(['saved' => $saved]);
         break;
 
+    // ---- CUENTA CORRIENTE CLIENTE ----
+    case 'get_cta_corriente':
+        $cliente_id = input_int('cliente_id');
+        $movs = query_all('SELECT * FROM cuenta_corriente WHERE cliente_id = ? ORDER BY fecha DESC, id DESC', [$cliente_id]);
+        respond($movs);
+        break;
+
+    case 'create_cc_movimiento':
+        if (!can_edit($user_id, 'cta_corriente') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $cliente_id = input_int('cliente_id');
+        $tipo = input('tipo');
+        $desc = input('descripcion');
+        $monto = input_int('monto');
+        $fecha = input('fecha') ?: date('Y-m-d');
+        if (!$cliente_id || !$tipo || !$desc || !$monto) fail('Todos los campos son obligatorios');
+        db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, ?, ?, ?, ?)',
+            [$cliente_id, $tipo, $desc, $monto, $fecha]);
+        // Si es un pago, registrar también como ingreso en finanzas
+        if ($tipo === 'pago') {
+            db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha, origen, created_at) VALUES ("ingreso", "Servicios profesionales", ?, ?, ?, ?, "manual", datetime("now"))',
+                [$desc, $monto, $cliente_id, $fecha]);
+        }
+        // Si es gasto_ads, registrar como gasto en finanzas
+        if ($tipo === 'gasto_ads') {
+            db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha, origen, created_at) VALUES ("gasto", "Publicidad", ?, ?, ?, ?, "manual", datetime("now"))',
+                [$desc, $monto, $cliente_id, $fecha]);
+        }
+        log_activity('finance', "Cta corriente: $tipo $desc " . format_money($monto), $cliente_id);
+        respond(['id' => last_id()]);
+        break;
+
     // ---- MARKETING ----
     case 'get_campaign':
         $ca = query_one('SELECT * FROM campanas WHERE id = ?', [input_int('id')]);
