@@ -393,7 +393,146 @@ switch ($action) {
         respond(['created' => $created, 'skipped' => $skipped]);
         break;
 
-    // ---- ARCHIVOS DE FACTURA ----
+    // ---- SUBIR FACTURA + CREAR AUTOMÁTICAMENTE ----
+    case 'upload_and_create_invoice':
+        if (!can_edit($user_id, 'billing')) fail('Sin permiso');
+
+        $cliente_id = input_int('cliente_id');
+        if (!$cliente_id) fail('Cliente obligatorio');
+
+        $numero = input('numero');
+        $concepto = input('concepto');
+        $monto = input_int('monto');
+        $impuesto = 0; // Facturas exentas de IVA
+        $total = $monto;
+        $fecha_emision = input('fecha_emision') ?: date('Y-m-d');
+        $fecha_venc = date('Y-m-d', strtotime($fecha_emision . ' +30 days'));
+        $estado_pago = input('estado_pago'); // 'pendiente' o 'pagada'
+        $servicios = input('servicios');
+        $notas = input('notas');
+
+        if (empty($numero)) {
+            $last = query_scalar('SELECT numero FROM facturas ORDER BY id DESC LIMIT 1') ?? 'F-0000';
+            $numero = 'F-' . str_pad(intval(preg_replace('/\D/', '', $last)) + 1, 4, '0', STR_PAD_LEFT);
+        }
+        if (empty($concepto)) $concepto = 'Factura ' . $numero;
+
+        // Crear factura como emitida (trigger genera CxC)
+        db_execute('INSERT INTO facturas (numero, cliente_id, concepto, detalle, monto, impuesto, total, estado, fecha_emision, fecha_vencimiento) VALUES (?, ?, ?, ?, ?, ?, ?, "emitida", ?, ?)',
+            [$numero, $cliente_id, $concepto, ($servicios ? "Servicios: $servicios" : '') . ($notas ? "\n$notas" : ''), $monto, $impuesto, $total, $fecha_emision, $fecha_venc]);
+        $factura_id = last_id();
+
+        // Si ya pagada → registrar abono (trigger actualiza CxC + finanzas)
+        $pagada = false;
+        if ($estado_pago === 'pagada' && $total > 0) {
+            $cxc = query_one('SELECT id FROM cuentas_cobrar WHERE factura_id = ?', [$factura_id]);
+            if ($cxc) {
+                $metodo = input('metodo_pago') ?: 'transferencia';
+                $fecha_pago = input('fecha_pago') ?: date('Y-m-d');
+                db_execute("INSERT INTO abonos (cuenta_cobrar_id, monto, metodo_pago, referencia, fecha, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+                    [$cxc['id'], $total, $metodo, $numero, $fecha_pago]);
+                $pagada = true;
+            }
+        }
+
+        // Subir archivos adjuntos
+        $uploaded = 0;
+        $upload_dir = __DIR__ . '/../uploads/facturas/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
+        if (!empty($_FILES['archivos'])) {
+            $files = $_FILES['archivos'];
+            $count = is_array($files['name']) ? count($files['name']) : 1;
+            for ($i = 0; $i < $count; $i++) {
+                $name = is_array($files['name']) ? $files['name'][$i] : $files['name'];
+                $tmp = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
+                $error = is_array($files['error']) ? $files['error'][$i] : $files['error'];
+                if ($error !== UPLOAD_ERR_OK) continue;
+                $safe_name = date('Ymd_His') . '_' . $i . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
+                $dest = $upload_dir . $safe_name;
+                if (move_uploaded_file($tmp, $dest)) {
+                    db_execute("INSERT INTO archivos_factura (factura_id, cliente_id, nombre_archivo, ruta, servicio, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+                        [$factura_id, $cliente_id, $name, 'uploads/facturas/' . $safe_name, $servicios, $notas]);
+                    $uploaded++;
+                }
+            }
+        }
+
+        // Guardar mapeo razón social si viene
+        $razon_social = input('razon_social');
+        if ($razon_social) {
+            db_execute('INSERT OR REPLACE INTO rut_cliente_map (razon_social, rut, cliente_id) VALUES (?, ?, ?)',
+                [$razon_social, input('rut_factura'), $cliente_id]);
+        }
+
+        log_activity('billing', "Factura $numero creada" . ($pagada ? ' (pagada)' : '') . " — " . format_money($total), $cliente_id);
+        respond(['numero' => $numero, 'factura_id' => $factura_id, 'pagada' => $pagada, 'archivos' => $uploaded]);
+        break;
+
+    // ---- EXTRAER DATOS DE PDF ----
+    case 'extract_pdf_data':
+        if (!can_edit($user_id, 'billing')) fail('Sin permiso');
+        if (empty($_FILES['pdf'])) fail('No se recibió archivo');
+
+        $tmp = $_FILES['pdf']['tmp_name'];
+        $text = shell_exec('pdftotext -layout ' . escapeshellarg($tmp) . ' - 2>/dev/null') ?? '';
+
+        // Extraer monto total
+        $monto = 0;
+        // Buscar patrones: "TOTAL $123.456", "Total: $123,456", "MONTO TOTAL 123.456"
+        if (preg_match('/(?:TOTAL|MONTO\s*TOTAL|TOTAL\s*NETO|MONTO\s*NETO)\s*\$?\s*([\d.,]+)/i', $text, $m)) {
+            $monto = (int)str_replace(['.', ','], ['', ''], $m[1]);
+        } elseif (preg_match('/\$\s*([\d.]+)\s*$/m', $text, $m)) {
+            $monto = (int)str_replace('.', '', $m[1]);
+        }
+
+        // Extraer razón social / RUT
+        $razon_social = '';
+        $rut = '';
+        if (preg_match('/(?:RAZON\s*SOCIAL|RAZON\s*SOC\.|SEÑOR(?:ES)?|CLIENTE)\s*:?\s*(.+)/i', $text, $m)) {
+            $razon_social = trim($m[1]);
+        }
+        if (preg_match('/(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])/i', $text, $m)) {
+            $rut = $m[1];
+        }
+
+        // Extraer número de factura
+        $numero_factura = '';
+        if (preg_match('/(?:FACTURA|N°|Nro|BOLETA)\s*(?:EXENTA|ELECTRONICA|DE VENTA)?\s*(?:N°|Nro\.?)?\s*(\d+)/i', $text, $m)) {
+            $numero_factura = $m[1];
+        }
+
+        // Extraer fecha
+        $fecha = '';
+        if (preg_match('/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/', $text, $m)) {
+            $year = strlen($m[3]) === 2 ? '20' . $m[3] : $m[3];
+            $fecha = "$year-" . str_pad($m[2], 2, '0', STR_PAD_LEFT) . '-' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
+        }
+
+        // Buscar match de razón social con clientes conocidos
+        $cliente_sugerido = null;
+        if ($razon_social) {
+            $map = query_one('SELECT cliente_id FROM rut_cliente_map WHERE razon_social = ? OR razon_social LIKE ?',
+                [$razon_social, '%' . substr($razon_social, 0, 20) . '%']);
+            if ($map) $cliente_sugerido = (int)$map['cliente_id'];
+        }
+        if (!$cliente_sugerido && $rut) {
+            $map = query_one('SELECT cliente_id FROM rut_cliente_map WHERE rut = ?', [$rut]);
+            if ($map) $cliente_sugerido = (int)$map['cliente_id'];
+        }
+
+        respond([
+            'monto' => $monto,
+            'razon_social' => $razon_social,
+            'rut' => $rut,
+            'numero_factura' => $numero_factura,
+            'fecha' => $fecha,
+            'cliente_sugerido' => $cliente_sugerido,
+            'texto_preview' => mb_substr($text, 0, 500),
+        ]);
+        break;
+
+    // ---- ARCHIVOS DE FACTURA (legacy) ----
     case 'upload_invoices':
         if (!can_edit($user_id, 'billing')) fail('Sin permiso');
         $cliente_id = input_int('cliente_id');

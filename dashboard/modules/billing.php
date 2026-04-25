@@ -1,8 +1,7 @@
 <?php
 /**
- * Módulo Facturación — Emisión y control de facturas
- * AUTOMATIZACIÓN: Al emitir factura → genera cuenta por cobrar automáticamente (trigger SQLite)
- * Al anular factura → anula cuenta por cobrar automáticamente
+ * Módulo Facturación — Emisión, upload y control de facturas
+ * AUTOMATIZACIÓN: Factura emitida → CxC automática → Abono si pagada → Ingreso en Finanzas
  */
 
 $filtro_estado = $_GET['estado'] ?? '';
@@ -10,44 +9,31 @@ $where = $filtro_estado ? 'AND f.estado = ?' : '';
 $params = $filtro_estado ? [$filtro_estado] : [];
 
 $facturas = query_all("SELECT f.*, c.nombre as cliente_nombre,
-    (SELECT estado FROM cuentas_cobrar WHERE factura_id = f.id LIMIT 1) as estado_cobro
+    (SELECT estado FROM cuentas_cobrar WHERE factura_id = f.id LIMIT 1) as estado_cobro,
+    (SELECT GROUP_CONCAT(nombre_archivo, ', ') FROM archivos_factura WHERE factura_id = f.id) as archivos
     FROM facturas f
     LEFT JOIN clientes c ON f.cliente_id = c.id
     WHERE 1=1 $where
     ORDER BY f.created_at DESC", $params);
 
-$clientes_list = query_all('SELECT id, nombre FROM clientes ORDER BY nombre');
+$clientes_list = query_all('SELECT id, nombre, servicios, fee_mensual FROM clientes WHERE tipo = "activo" ORDER BY nombre');
 $proyectos_list = query_all('SELECT id, nombre FROM proyectos WHERE estado = "activo" ORDER BY nombre');
 
-// KPIs
 $total_emitidas = query_scalar('SELECT COUNT(*) FROM facturas WHERE estado = "emitida"') ?? 0;
 $total_pagadas = query_scalar('SELECT COUNT(*) FROM facturas WHERE estado = "pagada" AND strftime("%Y-%m", pagado_at) = strftime("%Y-%m", "now")') ?? 0;
 $monto_emitido_mes = query_scalar('SELECT COALESCE(SUM(total),0) FROM facturas WHERE strftime("%Y-%m", fecha_emision) = strftime("%Y-%m", "now") AND estado != "anulada"') ?? 0;
 $monto_cobrado_mes = query_scalar('SELECT COALESCE(SUM(total),0) FROM facturas WHERE estado = "pagada" AND strftime("%Y-%m", pagado_at) = strftime("%Y-%m", "now")') ?? 0;
 
-// Último número de factura
 $last_num = query_scalar('SELECT numero FROM facturas ORDER BY id DESC LIMIT 1') ?? 'F-0000';
 $next_num_int = intval(preg_replace('/\D/', '', $last_num)) + 1;
 $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
 ?>
 
 <div class="kpi-grid">
-    <div class="kpi-card">
-        <div class="kpi-label">Emitidas Pendientes</div>
-        <div class="kpi-value warning"><?= $total_emitidas ?></div>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Cobradas Este Mes</div>
-        <div class="kpi-value success"><?= $total_pagadas ?></div>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Facturado Mes</div>
-        <div class="kpi-value"><?= format_money($monto_emitido_mes) ?></div>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Cobrado Mes</div>
-        <div class="kpi-value success"><?= format_money($monto_cobrado_mes) ?></div>
-    </div>
+    <div class="kpi-card" style="border-left:3px solid var(--warning)"><div class="kpi-label">Pendientes de Cobro</div><div class="kpi-value warning"><?= $total_emitidas ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--success)"><div class="kpi-label">Cobradas Este Mes</div><div class="kpi-value success"><?= $total_pagadas ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--accent)"><div class="kpi-label">Facturado Mes</div><div class="kpi-value"><?= format_money($monto_emitido_mes) ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--success)"><div class="kpi-label">Cobrado Mes</div><div class="kpi-value success"><?= format_money($monto_cobrado_mes) ?></div></div>
 </div>
 
 <div class="filters-bar">
@@ -63,10 +49,13 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
 <div class="table-container">
     <div class="table-header">
         <span class="table-title">Facturas</span>
+        <div class="table-actions">
         <?php if (can_edit($current_user['id'], 'billing')): ?>
-            <button class="btn btn-primary btn-sm" onclick="openNewInvoice()">+ Nueva Factura</button>
-            <button class="btn btn-secondary btn-sm" onclick="generateMonthlyBilling()">Generar Facturacion Mensual</button>
+            <button class="btn btn-primary btn-sm" onclick="openUploadModal()">Subir Factura</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewInvoice()">+ Crear Manual</button>
+            <button class="btn btn-secondary btn-sm" onclick="generateMonthlyBilling()">Facturacion Mensual</button>
         <?php endif; ?>
+        </div>
     </div>
     <table>
         <thead>
@@ -74,13 +63,11 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
                 <th>N°</th>
                 <th>Cliente</th>
                 <th>Concepto</th>
-                <th>Neto</th>
-                <th>IVA</th>
                 <th>Total</th>
                 <th>Estado</th>
                 <th>Cobro</th>
+                <th>Archivo</th>
                 <th>Emisión</th>
-                <th>Vencimiento</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -89,21 +76,21 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
             <tr>
                 <td><strong><?= safe($f['numero']) ?></strong></td>
                 <td><?= safe($f['cliente_nombre']) ?></td>
-                <td><?= safe($f['concepto']) ?></td>
-                <td><?= format_money($f['monto']) ?></td>
-                <td><?= format_money($f['impuesto']) ?></td>
-                <td><strong><?= format_money($f['total']) ?></strong></td>
-                <td><span class="badge <?= status_class($f['estado'] === 'pagada' ? 'completado' : ($f['estado'] === 'emitida' ? 'pendiente' : $f['estado'])) ?>"><?= safe(ucfirst($f['estado'])) ?></span></td>
+                <td style="max-width:200px"><?= safe($f['concepto']) ?></td>
+                <td><strong><?= format_money($f['total']) ?></strong><br><span style="font-size:.7rem;color:var(--text-muted)">Neto <?= format_money($f['monto']) ?> + IVA <?= format_money($f['impuesto']) ?></span></td>
+                <td><span class="badge <?= $f['estado'] === 'pagada' ? 'status-success' : ($f['estado'] === 'emitida' ? 'status-warning' : ($f['estado'] === 'anulada' ? 'status-danger' : 'status-muted')) ?>"><?= ucfirst($f['estado']) ?></span></td>
                 <td>
                     <?php if ($f['estado_cobro']): ?>
-                        <span class="badge <?= status_class($f['estado_cobro'] === 'pagado' ? 'completado' : ($f['estado_cobro'] === 'vencido' ? 'vencido' : 'pendiente')) ?>"><?= safe(ucfirst($f['estado_cobro'])) ?></span>
-                    <?php else: ?>
-                        -
-                    <?php endif; ?>
+                        <span class="badge <?= $f['estado_cobro'] === 'pagado' ? 'status-success' : ($f['estado_cobro'] === 'vencido' ? 'status-danger' : 'status-warning') ?>"><?= ucfirst($f['estado_cobro']) ?></span>
+                    <?php else: echo '-'; endif; ?>
                 </td>
-                <td><?= format_date($f['fecha_emision']) ?></td>
-                <td><?= format_date($f['fecha_vencimiento']) ?></td>
                 <td>
+                    <?php if ($f['archivos']): ?>
+                        <span style="font-size:.75rem;color:var(--accent)" title="<?= safe($f['archivos']) ?>">&#128196; Adjunto</span>
+                    <?php else: echo '-'; endif; ?>
+                </td>
+                <td style="font-size:.82rem"><?= format_date($f['fecha_emision']) ?></td>
+                <td style="white-space:nowrap">
                     <?php if (can_edit($current_user['id'], 'billing')): ?>
                         <?php if ($f['estado'] === 'borrador'): ?>
                             <button class="btn btn-primary btn-sm" onclick="emitInvoice(<?= $f['id'] ?>)">Emitir</button>
@@ -117,78 +104,346 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
             </tr>
             <?php endforeach; ?>
             <?php if (empty($facturas)): ?>
-            <tr><td colspan="11" class="empty-state">No hay facturas</td></tr>
+            <tr><td colspan="9" class="empty-state">No hay facturas. Usa "Subir Factura" para cargar un PDF y crear la factura automaticamente.</td></tr>
             <?php endif; ?>
         </tbody>
     </table>
 </div>
 
-<!-- Archivos adjuntos -->
-<div class="table-container" style="margin-top:20px;">
-    <div class="table-header">
-        <span class="table-title">Archivos Adjuntos</span>
-        <?php if (can_edit($current_user['id'], 'billing')): ?>
-            <button class="btn btn-primary btn-sm" onclick="openUploadModal()">Adjuntar Facturas</button>
-        <?php endif; ?>
-    </div>
-    <div id="archivosContainer">
-        <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem;">Cargando archivos...</div>
-    </div>
-</div>
-
-<div style="margin-top:16px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px; font-size:.8rem; color:var(--text-muted);">
-    <strong>Automatización:</strong> Al emitir una factura se genera automáticamente una Cuenta por Cobrar. Al registrar pagos en Cuentas por Cobrar, se actualiza el estado de la factura y se registra el ingreso en Finanzas.
+<div style="margin-top:16px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:.78rem;color:var(--text-muted);">
+    <strong>Flujo automatico:</strong> Subir Factura → crea factura emitida → genera Cuenta por Cobrar → si marcas como pagada, registra abono + ingreso en Finanzas.
 </div>
 
 <script>
 const bClientesList = <?= json_encode(array_column($clientes_list, 'nombre', 'id')) ?>;
+const bClientesData = <?= json_encode(array_combine(array_column($clientes_list, 'id'), $clientes_list)) ?>;
 const bProyectosList = <?= json_encode(array_column($proyectos_list, 'nombre', 'id')) ?>;
 const nextNum = '<?= $next_num ?>';
 
+// ============================================================
+// SUBIR FACTURA (flujo principal)
+// ============================================================
+function openUploadModal() {
+    // Paso 1: Subir PDF para extraer datos
+    const body = `
+    <div style="display:grid;gap:16px;">
+        <p style="font-size:.85rem;color:var(--text-muted)">Sube las facturas en PDF. Se extraeran automaticamente el monto, razon social, numero y fecha.</p>
+        <div class="form-group">
+            <label class="form-label">Archivos de factura (PDF, XML, imagen)</label>
+            <input type="file" name="archivos" id="inputArchivosStep1" multiple accept=".pdf,.png,.jpg,.jpeg,.xml"
+                style="padding:16px;background:var(--bg);border:2px dashed var(--border);border-radius:10px;color:var(--text);cursor:pointer;width:100%;font-size:.85rem;"
+                onchange="extractPdfData(this)">
+            <div id="fileCountStep1" style="font-size:.72rem;color:var(--text-muted);margin-top:4px;"></div>
+        </div>
+        <div id="extractionResult" style="display:none;"></div>
+    </div>`;
+    Modal.open('Subir Factura', body,
+        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
+         <button class="btn btn-primary" onclick="goToStep2()" id="btnStep1" disabled>Continuar</button>`);
+}
+
+let extractedData = {};
+
+async function extractPdfData(input) {
+    const files = input.files;
+    if (!files.length) return;
+
+    const countEl = document.getElementById('fileCountStep1');
+    countEl.textContent = `${files.length} archivo${files.length > 1 ? 's' : ''} seleccionado${files.length > 1 ? 's' : ''}`;
+
+    const resultDiv = document.getElementById('extractionResult');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:.85rem;">Analizando PDF...</div>';
+
+    // Extraer datos del primer PDF
+    const formData = new FormData();
+    formData.append('action', 'extract_pdf_data');
+    formData.append('csrf_token', APP.csrf);
+    formData.append('pdf', files[0]);
+
+    try {
+        const res = await fetch('api/data.php', { method: 'POST', body: formData });
+        const json = await res.json();
+        if (json.ok) {
+            extractedData = json.data;
+            let html = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.82rem;">';
+            html += '<div style="font-weight:600;margin-bottom:8px;color:var(--accent)">Datos extraidos del PDF:</div>';
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+            if (extractedData.numero_factura) html += `<div><span style="color:var(--text-muted)">N° Factura:</span> <strong>${escHtml(extractedData.numero_factura)}</strong></div>`;
+            if (extractedData.monto) html += `<div><span style="color:var(--text-muted)">Monto:</span> <strong style="color:var(--success)">${fmtMoney(extractedData.monto)}</strong></div>`;
+            if (extractedData.razon_social) html += `<div><span style="color:var(--text-muted)">Razon Social:</span> ${escHtml(extractedData.razon_social)}</div>`;
+            if (extractedData.rut) html += `<div><span style="color:var(--text-muted)">RUT:</span> ${escHtml(extractedData.rut)}</div>`;
+            if (extractedData.fecha) html += `<div><span style="color:var(--text-muted)">Fecha:</span> ${escHtml(extractedData.fecha)}</div>`;
+            if (extractedData.cliente_sugerido) html += `<div><span style="color:var(--success)">Cliente detectado automaticamente</span></div>`;
+            html += '</div></div>';
+            resultDiv.innerHTML = html;
+            document.getElementById('btnStep1').disabled = false;
+        } else {
+            resultDiv.innerHTML = '<div style="color:var(--warning);font-size:.82rem;">No se pudo extraer datos del PDF. Puedes completar los campos manualmente.</div>';
+            extractedData = {};
+            document.getElementById('btnStep1').disabled = false;
+        }
+    } catch(e) {
+        resultDiv.innerHTML = '<div style="color:var(--warning);font-size:.82rem;">Error al analizar. Puedes completar los campos manualmente.</div>';
+        extractedData = {};
+        document.getElementById('btnStep1').disabled = false;
+    }
+}
+
+function goToStep2() {
+    const files = document.getElementById('inputArchivosStep1').files;
+    openUploadStep2(files);
+}
+
+function openUploadStep2(files) {
+    const clienteOpts = Object.entries(bClientesList).map(([id, name]) =>
+        `<option value="${id}" ${extractedData.cliente_sugerido == id ? 'selected' : ''}>${escHtml(name)}</option>`).join('');
+
+    const numFact = extractedData.numero_factura ? 'F-' + extractedData.numero_factura : nextNum;
+    const montoVal = extractedData.monto || '';
+    const fechaVal = extractedData.fecha || new Date().toISOString().split('T')[0];
+    const razonSocial = extractedData.razon_social || '';
+    const rutFact = extractedData.rut || '';
+
+    const body = `
+    <form id="frmUpload" enctype="multipart/form-data" style="display:grid;gap:14px;">
+        ${razonSocial ? `<div style="background:var(--bg);padding:10px 14px;border-radius:8px;font-size:.82rem;border:1px solid var(--border)"><span style="color:var(--text-muted)">Razon social detectada:</span> <strong>${escHtml(razonSocial)}</strong> ${rutFact ? '(' + escHtml(rutFact) + ')' : ''}<input type="hidden" name="razon_social" value="${escHtml(razonSocial)}"><input type="hidden" name="rut_factura" value="${escHtml(rutFact)}"></div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+                <label class="form-label">Cliente *</label>
+                <select name="cliente_id" class="form-select" required onchange="onClienteChange(this.value)">
+                    <option value="">Seleccionar...</option>
+                    ${clienteOpts}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">N° Factura</label>
+                <input type="text" name="numero" class="form-input" value="${escHtml(numFact)}">
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+                <label class="form-label">Concepto *</label>
+                <input type="text" name="concepto" class="form-input" placeholder="Ej: Fee mensual abril 2026" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Monto (exento IVA) *</label>
+                <input type="number" name="monto" class="form-input" value="${montoVal}" required style="font-weight:600;color:var(--success)">
+            </div>
+        </div>
+
+        <div id="serviciosChecklist" style="display:none;">
+            <label class="form-label">Servicios asociados (selecciona los que aplican)</label>
+            <div id="serviciosCheckboxes" style="display:grid;gap:6px;margin-top:6px;max-height:150px;overflow-y:auto;padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--border);"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+                <label class="form-label">Fecha Emision</label>
+                <input type="date" name="fecha_emision" class="form-input" value="${fechaVal}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Estado de pago *</label>
+                <select name="estado_pago" class="form-select" onchange="toggleFechaPago(this.value)">
+                    <option value="pendiente">Pendiente de pago</option>
+                    <option value="pagada">Ya pagada</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="fechaPagoGroup" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                    <label class="form-label">Fecha de pago</label>
+                    <input type="date" name="fecha_pago" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Metodo de pago</label>
+                    <select name="metodo_pago" class="form-select">
+                        <option value="transferencia">Transferencia</option>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="tarjeta">Tarjeta</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Notas</label>
+            <textarea name="notas" class="form-textarea" rows="2" placeholder="Observaciones..."></textarea>
+        </div>
+    </form>`;
+
+    Modal.open('Confirmar Factura', body,
+        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
+         <button class="btn btn-primary" onclick="submitUpload()" id="btnUpload">Crear Factura</button>`);
+
+    // Auto-trigger client change if pre-selected
+    if (extractedData.cliente_sugerido) {
+        setTimeout(() => onClienteChange(extractedData.cliente_sugerido), 100);
+    }
+}
+
+// Store files from step 1 globally
+let uploadedFiles = null;
+
+function openUploadStep2_orig() {} // placeholder
+const _goToStep2 = goToStep2;
+goToStep2 = function() {
+    uploadedFiles = document.getElementById('inputArchivosStep1').files;
+    openUploadStep2(uploadedFiles);
+};
+
+function toggleFechaPago(val) {
+    document.getElementById('fechaPagoGroup').style.display = val === 'pagada' ? 'block' : 'none';
+}
+
+function onClienteChange(clienteId) {
+    const container = document.getElementById('serviciosChecklist');
+    const checkboxes = document.getElementById('serviciosCheckboxes');
+    if (!clienteId) { container.style.display = 'none'; return; }
+
+    const cliente = bClientesData[clienteId];
+    if (!cliente || !cliente.servicios) { container.style.display = 'none'; return; }
+
+    const svcs = cliente.servicios.split(',').map(s => s.trim()).filter(s => s);
+    if (svcs.length === 0) { container.style.display = 'none'; return; }
+
+    checkboxes.innerHTML = svcs.map((s, i) =>
+        `<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;padding:4px 0;">
+            <input type="checkbox" name="svc_${i}" value="${escHtml(s)}" style="accent-color:var(--accent);width:16px;height:16px;cursor:pointer;">
+            ${escHtml(s)}
+        </label>`
+    ).join('');
+    container.style.display = 'block';
+
+    // Auto-fill concepto y monto si fee > 0
+    const concepto = document.querySelector('#frmUpload [name="concepto"]');
+    const monto = document.querySelector('#frmUpload [name="monto"]');
+    if (concepto && !concepto.value && cliente.fee_mensual > 0) {
+        const mes = new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+        concepto.value = `Fee mensual ${mes}`;
+        monto.value = cliente.fee_mensual;
+        calcIVA();
+    }
+}
+
+function updateFileCount(input) {
+    const count = input.files.length;
+    const totalSize = Array.from(input.files).reduce((s, f) => s + f.size, 0);
+    document.getElementById('fileCount').textContent = count > 0
+        ? `${count} archivo${count > 1 ? 's' : ''} (${(totalSize / 1024 / 1024).toFixed(1)} MB)`
+        : '';
+}
+
+async function submitUpload() {
+    const form = document.getElementById('frmUpload');
+    const files = uploadedFiles;
+    const clienteId = form.querySelector('[name="cliente_id"]').value;
+    const concepto = form.querySelector('[name="concepto"]').value;
+    const monto = form.querySelector('[name="monto"]').value;
+
+    if (!clienteId) { toast('Selecciona un cliente', 'error'); return; }
+    if (!concepto) { toast('Ingresa un concepto', 'error'); return; }
+    if (!monto || monto <= 0) { toast('Ingresa el monto neto', 'error'); return; }
+    if (!files.length) { toast('Selecciona al menos un archivo', 'error'); return; }
+
+    // Collect checked services
+    const checkedSvcs = [];
+    form.querySelectorAll('#serviciosCheckboxes input[type="checkbox"]:checked').forEach(cb => {
+        checkedSvcs.push(cb.value);
+    });
+
+    const btn = document.getElementById('btnUpload');
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+
+    const formData = new FormData();
+    formData.append('action', 'upload_and_create_invoice');
+    formData.append('csrf_token', APP.csrf);
+    formData.append('cliente_id', clienteId);
+    formData.append('numero', form.querySelector('[name="numero"]').value || '');
+    formData.append('concepto', concepto);
+    formData.append('monto', monto);
+    formData.append('impuesto', form.querySelector('[name="impuesto"]').value || '0');
+    formData.append('fecha_emision', form.querySelector('[name="fecha_emision"]').value || '');
+    formData.append('estado_pago', form.querySelector('[name="estado_pago"]').value);
+    formData.append('fecha_pago', form.querySelector('[name="fecha_pago"]')?.value || '');
+    formData.append('metodo_pago', form.querySelector('[name="metodo_pago"]')?.value || 'transferencia');
+    formData.append('servicios', checkedSvcs.join(', '));
+    formData.append('notas', form.querySelector('[name="notas"]').value || '');
+
+    for (let i = 0; i < files.length; i++) {
+        formData.append('archivos[]', files[i]);
+    }
+
+    try {
+        const res = await fetch('api/data.php', { method: 'POST', body: formData });
+        const json = await res.json();
+        if (json.ok) {
+            let msg = `Factura ${json.data.numero} creada`;
+            if (json.data.pagada) msg += ' y marcada como pagada';
+            msg += `. ${json.data.archivos} archivo${json.data.archivos > 1 ? 's' : ''} adjunto${json.data.archivos > 1 ? 's' : ''}.`;
+            toast(msg);
+            Modal.close();
+            refreshPage();
+        } else {
+            toast(json.error || 'Error al procesar', 'error');
+        }
+    } catch (e) {
+        toast('Error de conexion', 'error');
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Subir y Crear Factura';
+    }
+}
+
+// ============================================================
+// FACTURA MANUAL (sin archivo)
+// ============================================================
 function openNewInvoice() {
     const body = `<form id="frmInvoice" class="form-grid">
-        ${formField('numero', 'Número Factura', 'text', nextNum, {required: true})}
+        ${formField('numero', 'N° Factura', 'text', nextNum, {required: true})}
         ${formField('cliente_id', 'Cliente', 'select', '', {required: true, options: bClientesList})}
         ${formField('proyecto_id', 'Proyecto (opcional)', 'select', '', {options: {'':'Sin proyecto', ...bProyectosList}})}
         ${formField('concepto', 'Concepto', 'text', '', {required: true})}
         ${formField('monto', 'Monto Neto', 'number', '', {required: true})}
         ${formField('impuesto', 'IVA (19%)', 'number', '')}
         ${formField('estado', 'Estado', 'select', 'emitida', {options: {borrador:'Borrador', emitida:'Emitida'}})}
-        ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
+        ${formField('fecha_emision', 'Fecha Emision', 'date', new Date().toISOString().split('T')[0])}
         ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date')}
         ${formField('detalle', 'Detalle', 'textarea', '', {fullWidth: true})}
     </form>`;
-    Modal.open('Nueva Factura', body,
+    Modal.open('Nueva Factura Manual', body,
         `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
          <button class="btn btn-primary" onclick="saveInvoice()">Guardar</button>`);
-
-    // Auto-calcular IVA
     setTimeout(() => {
-        const montoInput = document.querySelector('#frmInvoice [name="monto"]');
-        const ivaInput = document.querySelector('#frmInvoice [name="impuesto"]');
-        if (montoInput && ivaInput) {
-            montoInput.addEventListener('input', () => {
-                ivaInput.value = Math.round(parseInt(montoInput.value || 0) * 0.19);
-            });
-        }
+        const m = document.querySelector('#frmInvoice [name="monto"]');
+        const i = document.querySelector('#frmInvoice [name="impuesto"]');
+        if (m && i) m.addEventListener('input', () => { i.value = Math.round(parseInt(m.value||0)*0.19); });
     }, 100);
 }
 
 async function saveInvoice() {
     const data = getFormData('frmInvoice');
-    data.total = parseInt(data.monto || 0) + parseInt(data.impuesto || 0);
+    data.total = parseInt(data.monto||0) + parseInt(data.impuesto||0);
     const res = await API.post('create_invoice', data);
-    if (res) { toast('Factura creada. Cuenta por cobrar generada automáticamente.'); refreshPage(); }
+    if (res) { toast('Factura creada. CxC generada automaticamente.'); refreshPage(); }
 }
 
 async function emitInvoice(id) {
-    if (!confirmAction('¿Emitir esta factura? Se generará una cuenta por cobrar automáticamente.')) return;
+    if (!confirmAction('Emitir factura? Se genera CxC automaticamente.')) return;
     const res = await API.post('update_invoice', { id, estado: 'emitida' });
-    if (res) { toast('Factura emitida. Cuenta por cobrar generada.'); refreshPage(); }
+    if (res) { toast('Factura emitida'); refreshPage(); }
 }
 
 async function cancelInvoice(id) {
-    if (!confirmAction('¿Anular esta factura? Se anulará también la cuenta por cobrar asociada.')) return;
+    if (!confirmAction('Anular factura? Se anula la CxC asociada.')) return;
     const res = await API.post('update_invoice', { id, estado: 'anulada' });
     if (res) { toast('Factura anulada'); refreshPage(); }
 }
@@ -199,10 +454,9 @@ async function editInvoice(id) {
     const f = res.data;
     const body = `<form id="frmInvoice" class="form-grid">
         <input type="hidden" name="id" value="${f.id}">
-        ${formField('numero', 'Número', 'text', f.numero, {required: true})}
+        ${formField('numero', 'N°', 'text', f.numero)}
         ${formField('cliente_id', 'Cliente', 'select', f.cliente_id, {options: bClientesList})}
-        ${formField('proyecto_id', 'Proyecto (opcional)', 'select', f.proyecto_id || '', {options: {'':'Sin proyecto', ...bProyectosList}})}
-        ${formField('concepto', 'Concepto', 'text', f.concepto, {required: true})}
+        ${formField('concepto', 'Concepto', 'text', f.concepto)}
         ${formField('monto', 'Monto Neto', 'number', f.monto)}
         ${formField('impuesto', 'IVA', 'number', f.impuesto)}
         ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date', f.fecha_vencimiento || '')}
@@ -215,170 +469,17 @@ async function editInvoice(id) {
 
 async function updateInvoice() {
     const data = getFormData('frmInvoice');
-    data.total = parseInt(data.monto || 0) + parseInt(data.impuesto || 0);
+    data.total = parseInt(data.monto||0) + parseInt(data.impuesto||0);
     const res = await API.post('update_invoice', data);
     if (res) { toast('Factura actualizada'); refreshPage(); }
 }
 
 async function generateMonthlyBilling() {
-    const mes = new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' });
-    if (!confirmAction(`¿Generar facturas mensuales para todos los clientes activos con fee_mensual > 0? (${mes})`)) return;
+    if (!confirmAction('Generar facturas mensuales para todos los clientes activos con fee > 0?')) return;
     const res = await API.post('generate_monthly_billing', {});
     if (res) {
-        toast(`Facturacion mensual generada: ${res.data.created} facturas creadas, ${res.data.skipped} omitidas`);
+        toast(`${res.data.created} facturas creadas, ${res.data.skipped} omitidas`);
         refreshPage();
     }
 }
-
-// ---- Archivos adjuntos ----
-
-// Cargar servicios al seleccionar cliente
-function onUploadClientChange(select) {
-    const clienteId = select.value;
-    const serviciosDiv = document.getElementById('uploadServicios');
-    if (!clienteId) { serviciosDiv.innerHTML = ''; return; }
-
-    // Buscar servicios del cliente via API
-    API.get('get_client', { id: clienteId }).then(res => {
-        if (!res || !res.data.servicios) { serviciosDiv.innerHTML = ''; return; }
-        const svcs = res.data.servicios.split(',').map(s => s.trim()).filter(s => s);
-        if (svcs.length === 0) { serviciosDiv.innerHTML = '<span style="font-size:.8rem;color:var(--text-muted)">Sin servicios registrados</span>'; return; }
-        serviciosDiv.innerHTML = '<label class="form-label">Asociar a servicio</label><select name="servicio" class="form-select">' +
-            '<option value="">General (sin servicio específico)</option>' +
-            svcs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('') +
-            '</select>';
-    });
-}
-
-function openUploadModal() {
-    // Opciones de facturas existentes
-    const facturasOpts = <?= json_encode(array_map(fn($f) => ['id' => $f['id'], 'num' => $f['numero'], 'cliente' => $f['cliente_nombre']], $facturas)) ?>;
-    let facturaOptions = '<option value="">Sin asociar a factura</option>';
-    facturasOpts.forEach(f => {
-        facturaOptions += `<option value="${f.id}">${escHtml(f.num)} — ${escHtml(f.cliente)}</option>`;
-    });
-
-    const body = `
-    <form id="frmUpload" enctype="multipart/form-data" style="display:grid;gap:16px;">
-        <div class="form-group">
-            <label class="form-label">Archivos PDF (puedes seleccionar varios)</label>
-            <input type="file" name="archivos" id="inputArchivos" multiple accept=".pdf,.png,.jpg,.jpeg,.xml"
-                style="padding:12px;background:var(--bg);border:2px dashed var(--border);border-radius:10px;color:var(--text);cursor:pointer;width:100%;font-size:.85rem;"
-                onchange="updateFileCount(this)">
-            <div id="fileCount" style="font-size:.75rem;color:var(--text-muted);margin-top:4px;"></div>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Cliente</label>
-            <select name="cliente_id" class="form-select" required onchange="onUploadClientChange(this)">
-                <option value="">Seleccionar cliente...</option>
-                ${Object.entries(bClientesList).map(([id, name]) => '<option value="'+id+'">'+escHtml(name)+'</option>').join('')}
-            </select>
-        </div>
-        <div id="uploadServicios"></div>
-        <div class="form-group">
-            <label class="form-label">Asociar a factura (opcional)</label>
-            <select name="factura_id" class="form-select">${facturaOptions}</select>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Notas (opcional)</label>
-            <textarea name="notas" class="form-textarea" rows="2" placeholder="Descripción o comentarios..."></textarea>
-        </div>
-    </form>`;
-
-    Modal.open('Adjuntar Facturas / Documentos', body,
-        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
-         <button class="btn btn-primary" onclick="uploadFiles()" id="btnUpload">Subir Archivos</button>`);
-}
-
-function updateFileCount(input) {
-    const count = input.files.length;
-    const totalSize = Array.from(input.files).reduce((s, f) => s + f.size, 0);
-    document.getElementById('fileCount').textContent = count > 0
-        ? `${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${(totalSize / 1024 / 1024).toFixed(1)} MB)`
-        : '';
-}
-
-async function uploadFiles() {
-    const form = document.getElementById('frmUpload');
-    const files = document.getElementById('inputArchivos').files;
-    const clienteId = form.querySelector('[name="cliente_id"]').value;
-
-    if (!files.length) { toast('Selecciona al menos un archivo', 'error'); return; }
-    if (!clienteId) { toast('Selecciona un cliente', 'error'); return; }
-
-    const btn = document.getElementById('btnUpload');
-    btn.disabled = true;
-    btn.textContent = 'Subiendo...';
-
-    const formData = new FormData();
-    formData.append('action', 'upload_invoices');
-    formData.append('csrf_token', APP.csrf);
-    formData.append('cliente_id', clienteId);
-    formData.append('factura_id', form.querySelector('[name="factura_id"]').value || '');
-    formData.append('servicio', form.querySelector('[name="servicio"]')?.value || '');
-    formData.append('notas', form.querySelector('[name="notas"]').value || '');
-
-    for (let i = 0; i < files.length; i++) {
-        formData.append('archivos[]', files[i]);
-    }
-
-    try {
-        const res = await fetch('api/data.php', { method: 'POST', body: formData });
-        const json = await res.json();
-        if (json.ok) {
-            toast(`${json.data.uploaded} archivo${json.data.uploaded > 1 ? 's' : ''} subido${json.data.uploaded > 1 ? 's' : ''} correctamente`);
-            Modal.close();
-            loadArchivos();
-        } else {
-            toast(json.error || 'Error al subir', 'error');
-        }
-    } catch (e) {
-        toast('Error de conexión', 'error');
-        console.error(e);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Subir Archivos';
-    }
-}
-
-async function loadArchivos() {
-    const container = document.getElementById('archivosContainer');
-    try {
-        const res = await fetch('api/data.php?action=get_invoice_files');
-        const json = await res.json();
-        if (!json.ok || !json.data.length) {
-            container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem;">Sin archivos adjuntos. Usa el boton "Adjuntar Facturas" para subir documentos.</div>';
-            return;
-        }
-        let html = '<table><thead><tr><th>Archivo</th><th>Cliente</th><th>Factura</th><th>Servicio</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>';
-        json.data.forEach(f => {
-            const ext = f.nombre_archivo.split('.').pop().toLowerCase();
-            const icon = ext === 'pdf' ? '&#128196;' : (ext === 'xml' ? '&#128195;' : '&#128247;');
-            html += `<tr>
-                <td>${icon} <strong>${escHtml(f.nombre_archivo)}</strong></td>
-                <td>${escHtml(f.cliente_nombre || '-')}</td>
-                <td>${f.factura_numero ? escHtml(f.factura_numero) : '<span style="color:var(--text-muted)">-</span>'}</td>
-                <td>${f.servicio ? '<span class="badge status-info" style="font-size:.7rem">' + escHtml(f.servicio) + '</span>' : '-'}</td>
-                <td style="font-size:.8rem;color:var(--text-muted)">${escHtml(f.created_at || '-')}</td>
-                <td>
-                    <a href="${escHtml(f.ruta)}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>
-                    ${APP.canEdit ? '<button class="btn btn-danger btn-sm" onclick="deleteFile('+f.id+')">Eliminar</button>' : ''}
-                </td>
-            </tr>`;
-        });
-        html += '</tbody></table>';
-        container.innerHTML = html;
-    } catch (e) {
-        container.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:.85rem;">Error al cargar archivos</div>';
-    }
-}
-
-async function deleteFile(id) {
-    if (!confirmAction('¿Eliminar este archivo?')) return;
-    const res = await API.post('delete_invoice_file', { id });
-    if (res) { toast('Archivo eliminado'); loadArchivos(); }
-}
-
-// Cargar archivos al iniciar
-loadArchivos();
 </script>
