@@ -21,9 +21,9 @@ $sv_where = "AND sc.fecha_inicio <= '$ultimo_dia' AND (sc.fecha_fin IS NULL OR s
 
 $clientes = query_all("SELECT c.*, e.nombre as responsable_nombre,
     (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ('pendiente','en_progreso')) as tareas_pendientes,
-    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo = 'suscripcion' AND sc.estado = 'activo' $sv_where) as total_suscripcion,
-    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo IN ('implementacion','adicional') AND sc.estado = 'activo' $sv_where) as total_implementacion,
-    (SELECT COUNT(*) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.estado = 'activo' $sv_where) as servicios_activos
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo = 'suscripcion' AND sc.estado != 'cancelado' $sv_where) as total_suscripcion,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.tipo IN ('implementacion','adicional') AND sc.estado != 'cancelado' $sv_where) as total_implementacion,
+    (SELECT COUNT(*) FROM servicios_cliente sc WHERE sc.cliente_id = c.id AND sc.estado != 'cancelado' $sv_where) as servicios_activos
     FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id
     WHERE c.created_at <= '$ultimo_dia'
     ORDER BY c.nombre");

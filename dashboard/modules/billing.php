@@ -35,6 +35,7 @@ $primer_dia = "$mes_sel-01";
 $suscripciones = query_all("SELECT s.*, c.nombre as cliente_nombre
     FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
     WHERE s.tipo = 'suscripcion'
+    AND s.estado != 'cancelado'
     AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= '$ultimo_dia')
     AND (s.fecha_fin IS NULL OR s.fecha_fin >= '$primer_dia')
     AND s.monto > 0

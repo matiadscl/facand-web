@@ -42,13 +42,21 @@ for ($i = -6; $i <= 2; $i++) {
     $meses_selector[$m] = $meses_es[substr($m, 5)] . ' ' . substr($m, 0, 4);
 }
 
-// ---- Servicios (vigentes en el mes seleccionado) ----
-$where = "s.fecha_inicio <= '$ultimo_dia' AND (s.fecha_fin IS NULL OR s.fecha_fin >= '$primer_dia')";
+// ---- Servicios (vigentes en el mes seleccionado por fechas) ----
+// Un servicio es vigente en un mes si: fecha_inicio <= último día Y (fecha_fin IS NULL O fecha_fin >= primer día)
+// El estado actual no importa para vigencia histórica (un servicio finalizado en mayo estuvo vigente en abril)
+$vigente_where = "s.fecha_inicio <= '$ultimo_dia' AND (s.fecha_fin IS NULL OR s.fecha_fin >= '$primer_dia')";
+$where = $vigente_where;
 $params = [];
 if ($filtro_tipo)   { $where .= ' AND s.tipo = ?';   $params[] = $filtro_tipo; }
 if ($filtro_estado) { $where .= ' AND s.estado = ?'; $params[] = $filtro_estado; }
 
-$servicios = query_all("SELECT s.*, c.nombre as cliente_nombre
+$servicios = query_all("SELECT s.*, c.nombre as cliente_nombre,
+    CASE
+        WHEN s.fecha_fin IS NOT NULL AND s.fecha_fin < '$primer_dia' THEN s.estado
+        WHEN s.fecha_inicio > '$ultimo_dia' THEN 'futuro'
+        ELSE 'activo'
+    END as estado_mes
     FROM servicios_cliente s
     LEFT JOIN clientes c ON s.cliente_id = c.id
     WHERE $where
@@ -67,10 +75,10 @@ $presupuestos = query_all("SELECT p.*, c.nombre as cliente_nombre
 
 $clientes_list = query_all('SELECT id, nombre FROM clientes WHERE tipo IN ("activo","prospecto") ORDER BY nombre');
 
-// KPIs servicios (filtrados por mes)
+// KPIs servicios — vigencia por fechas, no por estado actual
 $mes_where = "fecha_inicio <= '$ultimo_dia' AND (fecha_fin IS NULL OR fecha_fin >= '$primer_dia')";
-$total_activos     = query_scalar("SELECT COUNT(*) FROM servicios_cliente WHERE estado = 'activo' AND $mes_where") ?? 0;
-$ingreso_total     = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = 'activo' AND $mes_where") ?? 0;
+$total_activos     = query_scalar("SELECT COUNT(*) FROM servicios_cliente WHERE $mes_where AND estado != 'cancelado'") ?? 0;
+$ingreso_total     = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE $mes_where AND estado != 'cancelado'") ?? 0;
 $total_pausados    = query_scalar("SELECT COUNT(*) FROM servicios_cliente WHERE estado = 'pausado' AND $mes_where") ?? 0;
 $ingreso_pausado   = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = 'pausado' AND $mes_where") ?? 0;
 
@@ -213,7 +221,8 @@ function showDesglose(idx) {
                     <td><?= safe($s['cliente_nombre']) ?></td>
                     <td><span class="badge <?= $s['tipo'] === 'suscripcion' ? 'status-info' : ($s['tipo'] === 'implementacion' ? 'status-warning' : 'status-muted') ?>"><?= ucfirst($s['tipo']) ?></span></td>
                     <td style="font-weight:600"><?= format_money($s['monto']) ?><?= $s['tipo'] === 'suscripcion' ? '<span style="font-size:.7rem;color:var(--text-muted)">/mes</span>' : '' ?></td>
-                    <td><span class="badge <?= $s['estado'] === 'activo' ? 'status-success' : ($s['estado'] === 'pausado' ? 'status-warning' : ($s['estado'] === 'cancelado' ? 'status-danger' : 'status-muted')) ?>"><?= ucfirst($s['estado']) ?></span></td>
+                    <?php $est = $s['estado_mes']; ?>
+                    <td><span class="badge <?= $est === 'activo' ? 'status-success' : ($est === 'pausado' ? 'status-warning' : ($est === 'cancelado' ? 'status-danger' : 'status-muted')) ?>"><?= ucfirst($est) ?></span></td>
                     <td style="font-size:.82rem"><?= $s['fecha_inicio'] ? format_date($s['fecha_inicio']) : '-' ?></td>
                     <td>
                         <?php if (can_edit($current_user['id'], 'services')): ?>
