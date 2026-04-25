@@ -5,8 +5,14 @@
  */
 
 $filtro_estado = $_GET['estado'] ?? '';
-$where = $filtro_estado ? 'AND f.estado = ?' : '';
-$params = $filtro_estado ? [$filtro_estado] : [];
+$filtro_periodo = $_GET['periodo'] ?? '';
+$where = '';
+$params = [];
+if ($filtro_estado) { $where .= ' AND f.estado = ?'; $params[] = $filtro_estado; }
+if ($filtro_periodo) { $where .= ' AND f.periodo_servicio = ?'; $params[] = $filtro_periodo; }
+
+// Períodos disponibles para el filtro
+$periodos_disponibles = query_all("SELECT DISTINCT periodo_servicio FROM facturas WHERE periodo_servicio != '' ORDER BY periodo_servicio DESC");
 
 $facturas = query_all("SELECT f.*, c.nombre as cliente_nombre,
     (SELECT estado FROM cuentas_cobrar WHERE factura_id = f.id LIMIT 1) as estado_cobro,
@@ -37,14 +43,30 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
 </div>
 
 <div class="filters-bar">
-    <select class="form-select" onchange="location.href='?page=billing&estado='+this.value">
+    <select class="form-select" onchange="updateBillingFilter()">
         <option value="">Todos los estados</option>
         <option value="borrador" <?= $filtro_estado === 'borrador' ? 'selected' : '' ?>>Borrador</option>
         <option value="emitida" <?= $filtro_estado === 'emitida' ? 'selected' : '' ?>>Emitida</option>
         <option value="pagada" <?= $filtro_estado === 'pagada' ? 'selected' : '' ?>>Pagada</option>
         <option value="anulada" <?= $filtro_estado === 'anulada' ? 'selected' : '' ?>>Anulada</option>
     </select>
+    <select class="form-select" id="filtroPeriodo" onchange="updateBillingFilter()">
+        <option value="">Todos los períodos</option>
+        <?php foreach ($periodos_disponibles as $p): ?>
+            <option value="<?= safe($p['periodo_servicio']) ?>" <?= $filtro_periodo === $p['periodo_servicio'] ? 'selected' : '' ?>><?= safe($p['periodo_servicio']) ?></option>
+        <?php endforeach; ?>
+    </select>
 </div>
+<script>
+function updateBillingFilter() {
+    const estado = document.querySelector('.filters-bar select:first-child').value;
+    const periodo = document.getElementById('filtroPeriodo').value;
+    let url = '?page=billing';
+    if (estado) url += '&estado=' + estado;
+    if (periodo) url += '&periodo=' + periodo;
+    location.href = url;
+}
+</script>
 
 <div class="table-container">
     <div class="table-header">
@@ -67,6 +89,7 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
                 <th>Estado</th>
                 <th>Cobro</th>
                 <th>Archivo</th>
+                <th>Período</th>
                 <th>Emisión</th>
                 <th>Acciones</th>
             </tr>
@@ -89,6 +112,7 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
                         <span style="font-size:.75rem;color:var(--accent)" title="<?= safe($f['archivos']) ?>">&#128196; Adjunto</span>
                     <?php else: echo '-'; endif; ?>
                 </td>
+                <td style="font-size:.82rem"><?= $f['periodo_servicio'] ? safe($f['periodo_servicio']) : '<span style="color:var(--text-muted)">—</span>' ?></td>
                 <td style="font-size:.82rem"><?= format_date($f['fecha_emision']) ?></td>
                 <td style="white-space:nowrap">
                     <?php if (can_edit($current_user['id'], 'billing')): ?>
@@ -104,7 +128,7 @@ $next_num = 'F-' . str_pad($next_num_int, 4, '0', STR_PAD_LEFT);
             </tr>
             <?php endforeach; ?>
             <?php if (empty($facturas)): ?>
-            <tr><td colspan="9" class="empty-state">No hay facturas. Usa "Subir Factura" para cargar un PDF y crear la factura automaticamente.</td></tr>
+            <tr><td colspan="10" class="empty-state">No hay facturas. Usa "Subir Factura" para cargar un PDF y crear la factura automaticamente.</td></tr>
             <?php endif; ?>
         </tbody>
     </table>
@@ -246,9 +270,13 @@ function openUploadStep2(files) {
             <div id="serviciosCheckboxes" style="display:grid;gap:6px;margin-top:6px;max-height:150px;overflow-y:auto;padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--border);"></div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div class="form-group">
-                <label class="form-label">Fecha Emision</label>
+                <label class="form-label">Período del servicio *</label>
+                <input type="month" name="periodo_servicio" class="form-input" value="${new Date().toISOString().slice(0,7)}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Fecha Emisión</label>
                 <input type="date" name="fecha_emision" class="form-input" value="${fechaVal}">
             </div>
             <div class="form-group">
@@ -378,6 +406,7 @@ async function submitUpload() {
     formData.append('monto', monto);
     formData.append('impuesto', form.querySelector('[name="impuesto"]').value || '0');
     formData.append('fecha_emision', form.querySelector('[name="fecha_emision"]').value || '');
+    formData.append('periodo_servicio', form.querySelector('[name="periodo_servicio"]').value || '');
     formData.append('estado_pago', form.querySelector('[name="estado_pago"]').value);
     formData.append('fecha_pago', form.querySelector('[name="fecha_pago"]')?.value || '');
     formData.append('metodo_pago', form.querySelector('[name="metodo_pago"]')?.value || 'transferencia');
@@ -422,7 +451,8 @@ function openNewInvoice() {
         ${formField('monto', 'Monto Neto', 'number', '', {required: true})}
         ${formField('impuesto', 'IVA (19%)', 'number', '')}
         ${formField('estado', 'Estado', 'select', 'emitida', {options: {borrador:'Borrador', emitida:'Emitida'}})}
-        ${formField('fecha_emision', 'Fecha Emision', 'date', new Date().toISOString().split('T')[0])}
+        ${formField('periodo_servicio', 'Período del servicio', 'month', new Date().toISOString().slice(0,7), {required: true})}
+        ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
         ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date')}
         ${formField('detalle', 'Detalle', 'textarea', '', {fullWidth: true})}
     </form>`;
@@ -466,6 +496,7 @@ async function editInvoice(id) {
         ${formField('concepto', 'Concepto', 'text', f.concepto)}
         ${formField('monto', 'Monto Neto', 'number', f.monto)}
         ${formField('impuesto', 'IVA', 'number', f.impuesto)}
+        ${formField('periodo_servicio', 'Período del servicio', 'month', f.periodo_servicio || '')}
         ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date', f.fecha_vencimiento || '')}
         ${formField('detalle', 'Detalle', 'textarea', f.detalle, {fullWidth: true})}
     </form>`;

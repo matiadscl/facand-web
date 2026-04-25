@@ -189,8 +189,8 @@ switch ($action) {
         $monto = input_int('monto');
         $impuesto = input_int('impuesto');
         $total = $monto + $impuesto;
-        db_execute('INSERT INTO facturas (numero, cliente_id, proyecto_id, concepto, detalle, monto, impuesto, total, estado, fecha_emision, fecha_vencimiento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$numero, $cliente_id, input_int_null('proyecto_id'), $concepto, input('detalle'), $monto, $impuesto, $total, input('estado') ?: 'emitida', input('fecha_emision') ?: date('Y-m-d'), input('fecha_vencimiento') ?: null]);
+        db_execute('INSERT INTO facturas (numero, cliente_id, proyecto_id, concepto, detalle, monto, impuesto, total, estado, fecha_emision, fecha_vencimiento, periodo_servicio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$numero, $cliente_id, input_int_null('proyecto_id'), $concepto, input('detalle'), $monto, $impuesto, $total, input('estado') ?: 'emitida', input('fecha_emision') ?: date('Y-m-d'), input('fecha_vencimiento') ?: null, input('periodo_servicio') ?: '']);
         log_activity('billing', "Factura creada: $numero por " . format_money($total), $cliente_id);
         respond(['id' => last_id()]);
         break;
@@ -207,8 +207,8 @@ switch ($action) {
             $monto = input_int('monto');
             $impuesto = input_int('impuesto');
             $total = $monto + $impuesto;
-            db_execute('UPDATE facturas SET numero=?, cliente_id=?, proyecto_id=?, concepto=?, detalle=?, monto=?, impuesto=?, total=?, fecha_vencimiento=?, updated_at=datetime("now") WHERE id=?',
-                [input('numero'), input_int('cliente_id'), input_int_null('proyecto_id'), input('concepto'), input('detalle'), $monto, $impuesto, $total, input('fecha_vencimiento') ?: null, $id]);
+            db_execute('UPDATE facturas SET numero=?, cliente_id=?, proyecto_id=?, concepto=?, detalle=?, monto=?, impuesto=?, total=?, fecha_vencimiento=?, periodo_servicio=?, updated_at=datetime("now") WHERE id=?',
+                [input('numero'), input_int('cliente_id'), input_int_null('proyecto_id'), input('concepto'), input('detalle'), $monto, $impuesto, $total, input('fecha_vencimiento') ?: null, input('periodo_servicio') ?: '', $id]);
             log_activity('billing', 'Factura actualizada: ' . input('numero'));
         }
         respond();
@@ -420,9 +420,11 @@ switch ($action) {
         }
         if (empty($concepto)) $concepto = 'Factura ' . $numero;
 
+        $periodo = input('periodo_servicio') ?: '';
+
         // Crear factura como emitida (trigger genera CxC)
-        db_execute('INSERT INTO facturas (numero, cliente_id, concepto, detalle, monto, impuesto, total, estado, fecha_emision, fecha_vencimiento) VALUES (?, ?, ?, ?, ?, ?, ?, "emitida", ?, ?)',
-            [$numero, $cliente_id, $concepto, ($servicios ? "Servicios: $servicios" : '') . ($notas ? "\n$notas" : ''), $monto, $impuesto, $total, $fecha_emision, $fecha_venc]);
+        db_execute('INSERT INTO facturas (numero, cliente_id, concepto, detalle, monto, impuesto, total, estado, fecha_emision, fecha_vencimiento, periodo_servicio) VALUES (?, ?, ?, ?, ?, ?, ?, "emitida", ?, ?, ?)',
+            [$numero, $cliente_id, $concepto, ($servicios ? "Servicios: $servicios" : '') . ($notas ? "\n$notas" : ''), $monto, $impuesto, $total, $fecha_emision, $fecha_venc, $periodo]);
         $factura_id = last_id();
 
         // Si ya pagada → registrar abono (trigger actualiza CxC + finanzas)

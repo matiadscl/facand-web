@@ -170,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
             estado TEXT NOT NULL DEFAULT 'emitida' CHECK(estado IN ('borrador','emitida','pagada','anulada')),
             fecha_emision TEXT DEFAULT (date('now')),
             fecha_vencimiento TEXT,
+            periodo_servicio TEXT DEFAULT '',
             pagado_at TEXT,
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now')),
