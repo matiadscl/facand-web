@@ -43,17 +43,17 @@ $mes_actual = date('Y-m');
 ?>
 
 <!-- Selector de año -->
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-    <a href="?page=budget&anio=<?= $anio - 1 ?>" class="btn btn-secondary btn-sm">← <?= $anio - 1 ?></a>
-    <span style="font-size:1.1rem;font-weight:700;"><?= $anio ?></span>
-    <a href="?page=budget&anio=<?= $anio + 1 ?>" class="btn btn-secondary btn-sm"><?= $anio + 1 ?> →</a>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <a href="?page=budget&anio=<?= $anio - 1 ?>" class="btn btn-secondary btn-sm">←</a>
+    <span style="font-size:1rem;font-weight:700;"><?= $anio ?></span>
+    <a href="?page=budget&anio=<?= $anio + 1 ?>" class="btn btn-secondary btn-sm">→</a>
     <?php if (can_edit($current_user['id'], 'budget')): ?>
-        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openEditBudget()">Editar Presupuesto</button>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openEditBudget()">Editar</button>
     <?php endif; ?>
 </div>
 
 <!-- KPIs anuales -->
-<div class="kpi-grid">
+<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);gap:8px;">
     <div class="kpi-card" style="border-left:3px solid var(--success)">
         <div class="kpi-label">Ingresos <?= $anio ?></div>
         <div class="kpi-value success"><?= format_money($total_ing_anual) ?></div>
@@ -82,14 +82,14 @@ $mes_actual = date('Y-m');
         <span class="table-title">Presupuesto Anual <?= $anio ?></span>
     </div>
     <div style="overflow-x:auto;">
-        <table style="font-size:.75rem;">
+        <table style="font-size:.68rem;table-layout:fixed;width:100%;">
             <thead>
                 <tr>
-                    <th style="min-width:140px;position:sticky;left:0;background:var(--surface);z-index:2;">Categoría</th>
+                    <th style="width:100px;position:sticky;left:0;background:var(--surface);z-index:2;font-size:.65rem;">Categoría</th>
                     <?php foreach ($meses_corto as $num => $label): ?>
-                        <th style="text-align:center;min-width:90px;<?= "$anio-$num" === $mes_actual ? 'color:var(--accent);' : '' ?>"><?= $label ?></th>
+                        <th style="text-align:center;width:auto;font-size:.65rem;padding:4px 2px;<?= "$anio-$num" === $mes_actual ? 'color:var(--accent);' : '' ?>"><?= $label ?></th>
                     <?php endforeach; ?>
-                    <th style="text-align:right;min-width:80px;color:var(--accent);">Total</th>
+                    <th style="text-align:right;width:60px;color:var(--accent);font-size:.65rem;padding:4px 2px;">Total</th>
                 </tr>
             </thead>
             <tbody>
@@ -126,17 +126,17 @@ $mes_actual = date('Y-m');
                             $bg = '';
                         }
                     ?>
-                        <td style="text-align:center;<?= $bg ? "background:$bg;" : '' ?><?= $is_current ? 'border:1px solid var(--accent);border-radius:4px;' : '' ?>">
-                            <div style="font-weight:600;font-size:.72rem;"><?= $plan > 0 ? format_money($plan) : '<span style="color:var(--text-muted);">-</span>' ?></div>
+                        <td style="text-align:center;padding:3px 1px;<?= $bg ? "background:$bg;" : '' ?><?= $is_current ? 'outline:1px solid var(--accent);' : '' ?>">
+                            <div style="font-weight:600;font-size:.65rem;"><?= $plan > 0 ? '$' . number_format($plan/1000, 0, ',', '.') . 'k' : '<span style="color:var(--text-muted);">-</span>' ?></div>
                             <?php if ($is_past || $is_current): ?>
-                                <div style="font-size:.65rem;color:<?= $real > $plan && $plan > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>;"><?= $real > 0 ? format_money($real) : '' ?></div>
-                                <div style="font-size:.8rem;"><?= $check ?></div>
+                                <div style="font-size:.58rem;color:<?= $real > $plan && $plan > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>;"><?= $real > 0 ? '$' . number_format($real/1000, 0, ',', '.') . 'k' : '' ?></div>
+                                <div style="font-size:.7rem;line-height:1;"><?= $check ?></div>
                             <?php endif; ?>
                         </td>
                     <?php endforeach; ?>
-                    <td style="text-align:right;">
-                        <div style="font-weight:600;"><?= format_money($cat_total_plan) ?></div>
-                        <div style="font-size:.65rem;color:<?= $cat_total_real > $cat_total_plan && $cat_total_plan > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>"><?= format_money($cat_total_real) ?></div>
+                    <td style="text-align:right;padding:3px 2px;">
+                        <div style="font-weight:600;font-size:.65rem;"><?= format_money($cat_total_plan) ?></div>
+                        <div style="font-size:.58rem;color:<?= $cat_total_real > $cat_total_plan && $cat_total_plan > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>"><?= format_money($cat_total_real) ?></div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -153,9 +153,9 @@ $mes_actual = date('Y-m');
                         $m_plan = 0; $m_real = 0;
                         foreach ($todas_cats as $c) { $m_plan += $pres_grid[$c][$mes] ?? 0; $m_real += $real_grid[$c][$mes] ?? 0; }
                     ?>
-                        <td style="text-align:center;">
-                            <div style="font-size:.72rem;"><?= $m_plan > 0 ? format_money($m_plan) : '-' ?></div>
-                            <div style="font-size:.65rem;color:var(--text-muted)"><?= $m_real > 0 ? format_money($m_real) : '' ?></div>
+                        <td style="text-align:center;padding:3px 1px;">
+                            <div style="font-size:.62rem;"><?= $m_plan > 0 ? '$' . number_format($m_plan/1000, 0, ',', '.') . 'k' : '-' ?></div>
+                            <div style="font-size:.58rem;color:var(--text-muted)"><?= $m_real > 0 ? '$' . number_format($m_real/1000, 0, ',', '.') . 'k' : '' ?></div>
                         </td>
                     <?php endforeach; ?>
                     <td style="text-align:right;">
@@ -185,23 +185,23 @@ const bMeses = ['01','02','03','04','05','06','07','08','09','10','11','12'];
 const bMesesLabel = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function openEditBudget() {
-    let html = '<div style="max-height:500px;overflow:auto;"><table style="font-size:.8rem;width:100%;">';
-    html += '<thead><tr><th style="min-width:120px;">Categoría</th>';
-    bMesesLabel.forEach(m => html += `<th style="text-align:center;min-width:70px;">${m}</th>`);
+    let html = '<div style="max-height:70vh;overflow:auto;"><table style="font-size:.72rem;width:100%;border-collapse:collapse;">';
+    html += '<thead><tr><th style="min-width:80px;text-align:left;padding:3px;font-size:.65rem;">Cat.</th>';
+    bMesesLabel.forEach(m => html += `<th style="text-align:center;padding:3px;font-size:.65rem;">${m}</th>`);
     html += '</tr></thead><tbody>';
 
     bCategorias.forEach(cat => {
-        html += `<tr><td><strong>${escHtml(cat)}</strong></td>`;
+        html += `<tr><td style="padding:3px;font-size:.7rem;"><strong>${escHtml(cat)}</strong></td>`;
         bMeses.forEach(m => {
             const mes = bAnio + '-' + m;
             const val = (bPresGrid[cat] && bPresGrid[cat][mes]) || '';
-            html += `<td><input type="number" class="form-input" style="width:70px;font-size:.75rem;padding:4px;text-align:right;" value="${val}" placeholder="0" data-cat="${escHtml(cat)}" data-mes="${mes}"></td>`;
+            html += `<td style="padding:2px;"><input type="number" class="form-input" style="width:52px;font-size:.68rem;padding:3px 2px;text-align:right;" value="${val}" placeholder="0" data-cat="${escHtml(cat)}" data-mes="${mes}"></td>`;
         });
         html += '</tr>';
     });
     html += '</tbody></table></div>';
 
-    Modal.open('Presupuesto Anual ' + bAnio, html,
+    Modal.open('Presupuesto ' + bAnio, html,
         `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
          <button class="btn btn-primary" id="btnSaveBudget" onclick="saveBudget()">Guardar</button>`);
 }
