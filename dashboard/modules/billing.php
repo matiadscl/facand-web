@@ -257,7 +257,7 @@ function openUploadStep2(files) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
                 <label class="form-label">Concepto *</label>
-                <input type="text" name="concepto" class="form-input" placeholder="Ej: Fee mensual abril 2026" value="${escHtml(conceptoVal)}" required>
+                <input type="text" name="concepto" class="form-input" placeholder="Ej: Suscripción abril 2026" value="${escHtml(conceptoVal)}" required>
             </div>
             <div class="form-group">
                 <label class="form-label">Monto (exento IVA) *</label>
@@ -354,12 +354,14 @@ function onClienteChange(clienteId) {
     ).join('');
     container.style.display = 'block';
 
-    // Auto-fill concepto y monto si fee > 0
+    // Auto-fill concepto con número de factura y monto si fee > 0
     const concepto = document.querySelector('#frmUpload [name="concepto"]');
     const monto = document.querySelector('#frmUpload [name="monto"]');
-    if (concepto && !concepto.value && cliente.fee_mensual > 0) {
-        const mes = new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' });
-        concepto.value = `Fee mensual ${mes}`;
+    const numFactura = document.querySelector('#frmUpload [name="numero"]');
+    if (concepto && !concepto.value) {
+        concepto.value = `Pago factura ${numFactura ? numFactura.value : ''}`;
+    }
+    if (monto && !monto.value && cliente.fee_mensual > 0) {
         monto.value = cliente.fee_mensual;
         // calcIVA() uses name="monto_neto"; this form uses name="monto"/"impuesto" — calculate inline
         const impuesto = document.querySelector('#frmUpload [name="impuesto"]');

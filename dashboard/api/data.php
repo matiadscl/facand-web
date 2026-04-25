@@ -257,6 +257,35 @@ switch ($action) {
         $ca ? respond($ca) : fail('Campaña no encontrada');
         break;
 
+    // ---- SERVICIOS ----
+    case 'get_service':
+        $id = input_int('id');
+        $service = query_one('SELECT * FROM servicios_cliente WHERE id = ?', [$id]);
+        if (!$service) fail('Servicio no encontrado');
+        respond($service);
+        break;
+
+    case 'create_service':
+        if (!can_edit($user_id, 'services')) fail('Sin permiso');
+        $nombre = input('nombre');
+        $cliente_id = input_int('cliente_id');
+        if (empty($nombre) || !$cliente_id) fail('Nombre y cliente son obligatorios');
+        db_execute('INSERT INTO servicios_cliente (cliente_id, nombre, tipo, monto, estado, fecha_inicio, fecha_fin, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$cliente_id, $nombre, input('tipo') ?: 'suscripcion', input_int('monto'), input('estado') ?: 'activo', input('fecha_inicio') ?: null, input('fecha_fin') ?: null, input('notas')]);
+        log_activity('services', "Servicio creado: $nombre", $cliente_id);
+        respond(['id' => last_id()]);
+        break;
+
+    case 'update_service':
+        if (!can_edit($user_id, 'services')) fail('Sin permiso');
+        $id = input_int('id');
+        db_execute('UPDATE servicios_cliente SET cliente_id=?, nombre=?, tipo=?, monto=?, estado=?, fecha_inicio=?, fecha_fin=?, notas=?, updated_at=datetime("now") WHERE id=?',
+            [input_int('cliente_id'), input('nombre'), input('tipo'), input_int('monto'), input('estado'), input('fecha_inicio') ?: null, input('fecha_fin') ?: null, input('notas'), $id]);
+        log_activity('services', 'Servicio actualizado: ' . input('nombre'));
+        respond();
+        break;
+
+    // ---- MARKETING ----
     case 'create_campaign':
         if (!can_edit($user_id, 'marketing')) fail('Sin permiso');
         $nombre = input('nombre');

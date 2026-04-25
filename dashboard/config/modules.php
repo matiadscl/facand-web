@@ -9,6 +9,7 @@ return [
     'crm'         => ['nombre' => 'Clientes',           'icono' => '&#128101;','archivo' => 'modules/crm.php',         'descripcion' => 'Gestión de clientes y pipeline'],
     'projects'    => ['nombre' => 'Proyectos',          'icono' => '&#128196;','archivo' => 'modules/projects.php',    'descripcion' => 'Gestión de proyectos'],
     'tasks'       => ['nombre' => 'Tareas',             'icono' => '&#9745;',  'archivo' => 'modules/tasks.php',       'descripcion' => 'Gestión de tareas y asignaciones'],
+    'services'    => ['nombre' => 'Servicios',            'icono' => '&#128188;','archivo' => 'modules/services.php',    'descripcion' => 'Servicios contratados por cliente'],
     'billing'     => ['nombre' => 'Facturación',        'icono' => '&#128179;','archivo' => 'modules/billing.php',     'descripcion' => 'Emisión y control de facturas'],
     'receivables' => ['nombre' => 'Cuentas por Cobrar', 'icono' => '&#128176;','archivo' => 'modules/receivables.php', 'descripcion' => 'Seguimiento de cobros pendientes'],
     'finance'     => ['nombre' => 'Finanzas',           'icono' => '&#128200;','archivo' => 'modules/finance.php',     'descripcion' => 'Ingresos, gastos y flujo de caja'],

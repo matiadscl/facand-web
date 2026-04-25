@@ -49,7 +49,7 @@ $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'
 
 <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
     <div class="kpi-card" style="border-left: 3px solid var(--accent);">
-        <div class="kpi-label">Fee Mensual Total</div>
+        <div class="kpi-label">Suscripción Mensual</div>
         <div class="kpi-value" style="color: var(--accent);"><?= format_money($fee_mensual_total) ?></div>
         <div class="kpi-sub"><?= $total_clientes ?> clientes activos</div>
     </div>

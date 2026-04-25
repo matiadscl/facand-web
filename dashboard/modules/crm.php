@@ -49,7 +49,7 @@ $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta
 
 <div class="crm-kpis">
     <div class="crm-kpi" style="border-left:3px solid var(--accent)"><div class="crm-kpi-label">Clientes Activos</div><div class="crm-kpi-val"><?= $activos ?></div></div>
-    <div class="crm-kpi" style="border-left:3px solid var(--success)"><div class="crm-kpi-label">Fee Mensual</div><div class="crm-kpi-val" style="color:var(--success)"><?= format_money($fee_total) ?></div></div>
+    <div class="crm-kpi" style="border-left:3px solid var(--success)"><div class="crm-kpi-label">Suscripción</div><div class="crm-kpi-val" style="color:var(--success)"><?= format_money($fee_total) ?></div></div>
     <div class="crm-kpi" style="border-left:3px solid <?= $vencidos ? 'var(--danger)' : 'var(--success)' ?>"><div class="crm-kpi-label">Pagos Vencidos</div><div class="crm-kpi-val <?= $vencidos ? 'danger' : '' ?>"><?= $vencidos ?></div></div>
     <div class="crm-kpi" style="border-left:3px solid var(--text-muted)"><div class="crm-kpi-label">Total Clientes</div><div class="crm-kpi-val"><?= count($clientes) ?></div></div>
 </div>
@@ -140,7 +140,7 @@ async function openClientDetail(id) {
                 <div style="font-size:1.05rem;font-weight:700;margin-top:3px">${escHtml(c.plan || 'Custom')}</div>
             </div>
             <div style="background:var(--bg);padding:14px 16px;border-radius:10px;border-left:3px solid var(--success)">
-                <div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Fee Mensual</div>
+                <div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Suscripción</div>
                 <div style="font-size:1.05rem;font-weight:700;color:var(--success);margin-top:3px">${c.fee_mensual ? fmtMoney(c.fee_mensual) : '$0'}</div>
             </div>
             <div style="background:var(--bg);padding:14px 16px;border-radius:10px;border-left:3px solid ${c.estado_pago==='vencido'?'var(--danger)':c.estado_pago==='pagado'?'var(--success)':'var(--warning)'}">
@@ -192,7 +192,7 @@ async function editClient(id) {
         ${formField('email', 'Email', 'email', c.email)}
         ${formField('telefono', 'Teléfono', 'text', c.telefono)}
         ${formField('plan', 'Plan', 'select', c.plan || '', {options: planesOpts})}
-        ${formField('fee_mensual', 'Fee Mensual ($)', 'number', c.fee_mensual)}
+        ${formField('fee_mensual', 'Suscripción ($)', 'number', c.fee_mensual)}
         ${formField('estado_pago', 'Estado Pago', 'select', c.estado_pago || 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
         ${formField('tipo', 'Tipo', 'select', c.tipo, {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo', cerrado:'Cerrado'}})}
         ${formField('etapa_pipeline', 'Pipeline', 'select', c.etapa_pipeline, {options: {lead:'Lead', contactado:'Contactado', propuesta:'Propuesta', negociacion:'Negociación', onboarding:'Onboarding', activo:'Activo', cerrado_ganado:'Cerrado Ganado', cerrado_perdido:'Cerrado Perdido'}})}
@@ -221,7 +221,7 @@ function openNewClient() {
         ${formField('email', 'Email', 'email')}
         ${formField('telefono', 'Teléfono', 'text')}
         ${formField('plan', 'Plan', 'select', '', {options: planesOpts})}
-        ${formField('fee_mensual', 'Fee Mensual ($)', 'number')}
+        ${formField('fee_mensual', 'Suscripción ($)', 'number')}
         ${formField('estado_pago', 'Estado Pago', 'select', 'pendiente', {options: {pendiente:'Pendiente', pagado:'Pagado', vencido:'Vencido', canje:'Canje'}})}
         ${formField('tipo', 'Tipo', 'select', 'activo', {options: {prospecto:'Prospecto', activo:'Activo', inactivo:'Inactivo'}})}
         ${formField('responsable_id', 'Responsable', 'select', '', {options: {'':'Sin asignar', ...crmEquipoList}})}
