@@ -1,0 +1,30 @@
+name: Deploy Facand Website to Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'planes.html'
+      - 'portafolio.html'
+      - 'preguntas-frecuentes.html'
+      - 'ficha-*.html'
+      - 'assets/**'
+      - 'dashboard/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 65002
+          source: "index.html,planes.html,portafolio.html,preguntas-frecuentes.html,ficha-corporativo.html,ficha-crm.html,ficha-ecommerce.html,ficha-full-ads.html,ficha-full-ads-seo.html,ficha-google-ads.html,ficha-growth.html,ficha-ia.html,ficha-landing.html,ficha-meta-ads.html,ficha-plataforma.html,ficha-portal.html,ficha-scale.html,ficha-starter.html,assets/,dashboard/"
+          target: ${{ secrets.DEPLOY_PATH }}
+          overwrite: true
