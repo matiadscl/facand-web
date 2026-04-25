@@ -739,6 +739,32 @@ switch ($action) {
         }
         break;
 
+    // ---- PRESUPUESTOS ----
+    case 'get_presupuesto':
+        $p = query_one('SELECT * FROM presupuestos WHERE id = ?', [input_int('id')]);
+        $p ? respond($p) : fail('Presupuesto no encontrado');
+        break;
+
+    case 'create_presupuesto':
+        if (!can_edit($user_id, 'services')) fail('Sin permiso');
+        $nombre = input('nombre');
+        $cliente_id = input_int('cliente_id');
+        if (empty($nombre) || !$cliente_id) fail('Nombre y cliente son obligatorios');
+        db_execute('INSERT INTO presupuestos (cliente_id, nombre, servicios_detalle, monto_total, estado, fecha_emision, fecha_validez, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$cliente_id, $nombre, input('servicios_detalle'), input_int('monto_total'), input('estado') ?: 'borrador', input('fecha_emision') ?: date('Y-m-d'), input('fecha_validez') ?: null, input('notas')]);
+        log_activity('services', "Presupuesto creado: $nombre", $cliente_id);
+        respond(['id' => last_id()]);
+        break;
+
+    case 'update_presupuesto':
+        if (!can_edit($user_id, 'services')) fail('Sin permiso');
+        $id = input_int('id');
+        db_execute('UPDATE presupuestos SET cliente_id=?, nombre=?, servicios_detalle=?, monto_total=?, estado=?, fecha_emision=?, fecha_validez=?, notas=? WHERE id=?',
+            [input_int('cliente_id'), input('nombre'), input('servicios_detalle'), input_int('monto_total'), input('estado'), input('fecha_emision') ?: null, input('fecha_validez') ?: null, input('notas'), $id]);
+        log_activity('services', 'Presupuesto actualizado: ' . input('nombre'));
+        respond();
+        break;
+
     default:
         fail('Acción no reconocida: ' . $action);
 }

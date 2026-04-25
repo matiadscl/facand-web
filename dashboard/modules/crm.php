@@ -22,29 +22,31 @@ $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta
 .crm-search { flex:1; min-width:200px; padding:8px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:.85rem; outline:none; }
 .crm-search:focus { border-color:var(--accent); }
 
-.crm-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:14px; }
-
-.client-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; cursor:pointer; transition:all .15s; position:relative; }
-.client-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.2); }
-.client-card-top { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-.client-avatar { width:42px; height:42px; border-radius:10px; background:rgba(249,115,22,.12); display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--accent); font-size:.9rem; flex-shrink:0; }
-.client-name { font-size:.95rem; font-weight:600; }
-.client-rubro { font-size:.72rem; color:var(--text-muted); }
-.client-meta { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-.client-tag { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(255,255,255,.05); border:1px solid var(--border); }
-.client-tag-plan { background:rgba(56,189,248,.1); border-color:rgba(56,189,248,.2); color:#38bdf8; }
-.client-tag-pago-pagado { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.2); color:#4ade80; }
-.client-tag-pago-vencido { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.2); color:#f87171; }
-.client-tag-pago-pendiente { background:rgba(234,179,8,.1); border-color:rgba(234,179,8,.2); color:#facc15; }
-.client-tag-pago-canje { background:rgba(148,163,184,.1); border-color:rgba(148,163,184,.2); color:#94a3b8; }
-.client-bottom { display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid var(--border); }
-.client-fee { font-size:1rem; font-weight:700; color:var(--success); }
-.client-actions { display:flex; gap:4px; }
-.client-actions .btn { padding:4px 8px; font-size:.72rem; }
+/* Tabla de clientes */
+.table-container { overflow-x:auto; border-radius:10px; border:1px solid var(--border); }
+.crm-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+.crm-table thead tr { background:var(--bg); border-bottom:1px solid var(--border); }
+.crm-table th { padding:10px 14px; text-align:left; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); white-space:nowrap; }
+.crm-table tbody tr { border-bottom:1px solid var(--border); transition:background .12s; cursor:pointer; }
+.crm-table tbody tr:last-child { border-bottom:none; }
+.crm-table tbody tr:hover { background:rgba(255,255,255,.03); }
+.crm-table td { padding:10px 14px; vertical-align:middle; }
+.crm-table .td-nombre { font-weight:600; color:var(--text); }
+.crm-table .td-nombre:hover { color:var(--accent); text-decoration:underline; }
+.crm-table .td-fee { font-weight:700; color:var(--success); white-space:nowrap; }
+.crm-table .td-actions { white-space:nowrap; display:flex; gap:4px; align-items:center; }
+.crm-table .td-actions .btn { padding:4px 9px; font-size:.7rem; }
+.badge-plan { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(56,189,248,.1); border:1px solid rgba(56,189,248,.2); color:#38bdf8; white-space:nowrap; }
+.badge-pago-pagado { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); color:#4ade80; }
+.badge-pago-vencido { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.2); color:#f87171; }
+.badge-pago-pendiente { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(234,179,8,.1); border:1px solid rgba(234,179,8,.2); color:#facc15; }
+.badge-pago-canje { font-size:.68rem; padding:3px 8px; border-radius:4px; background:rgba(148,163,184,.1); border:1px solid rgba(148,163,184,.2); color:#94a3b8; }
+.resp-select { font-size:.75rem; background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text); padding:3px 6px; cursor:pointer; max-width:130px; }
+.resp-select:focus { border-color:var(--accent); outline:none; }
 .client-dash-link { display:inline-flex; align-items:center; gap:4px; font-size:.72rem; color:var(--accent); padding:4px 8px; border-radius:4px; background:rgba(249,115,22,.08); border:1px solid rgba(249,115,22,.15); transition:all .15s; }
 .client-dash-link:hover { background:rgba(249,115,22,.2); }
 
-@media(max-width:768px) { .crm-kpis { grid-template-columns:repeat(2,1fr); } .crm-grid { grid-template-columns:1fr; } }
+@media(max-width:768px) { .crm-kpis { grid-template-columns:repeat(2,1fr); } }
 
 /* Tabs CRM */
 .crm-tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:0; }
@@ -83,11 +85,11 @@ foreach ($clientes as $c) {
 </div>
 
 <div class="crm-tabs">
-    <button class="crm-tab active" onclick="switchCrmTab('cards', this)">Clientes</button>
+    <button class="crm-tab active" onclick="switchCrmTab('cards', this)">Lista de Clientes</button>
     <button class="crm-tab" onclick="switchCrmTab('pipeline', this)">Pipeline</button>
 </div>
 
-<!-- Vista Clientes (tarjetas) -->
+<!-- Vista Clientes (tabla) -->
 <div id="crmTabCards" class="crm-tab-content active">
     <div class="crm-toolbar">
         <input type="text" class="crm-search" id="crmSearch" placeholder="Buscar cliente..." oninput="filterClients()">
@@ -102,43 +104,71 @@ foreach ($clientes as $c) {
         <?php endif; ?>
     </div>
 
-    <div class="crm-grid" id="crmGrid">
-        <?php foreach ($clientes as $c): ?>
-        <div class="client-card" data-tipo="<?= $c['tipo'] ?>" data-nombre="<?= safe(strtolower($c['nombre'])) ?>" onclick="openClientDetail(<?= $c['id'] ?>)">
-            <div class="client-card-top">
-                <div class="client-avatar"><?= strtoupper(mb_substr($c['nombre'], 0, 2)) ?></div>
-                <div>
-                    <div class="client-name"><?= safe($c['nombre']) ?></div>
-                    <div class="client-rubro"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
-                </div>
-            </div>
-            <div class="client-meta">
-                <?php if ($c['plan']): ?>
-                    <span class="client-tag client-tag-plan"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
-                <?php endif; ?>
-                <span class="client-tag client-tag-pago-<?= $c['estado_pago'] ?>"><?= ucfirst($c['estado_pago']) ?></span>
-                <?php if ($c['etapa']): ?>
-                    <span class="client-tag"><?= safe($c['etapa']) ?></span>
-                <?php endif; ?>
-                <?php if ($c['tareas_pendientes'] > 0): ?>
-                    <span class="client-tag" style="color:var(--warning)"><?= $c['tareas_pendientes'] ?> tareas</span>
-                <?php endif; ?>
-            </div>
-            <div class="client-bottom" onclick="event.stopPropagation()">
-                <div class="client-fee"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) . '<span style="font-size:.7rem;font-weight:400;color:var(--text-muted)">/mes</span>' : '<span style="color:var(--text-muted);font-size:.82rem">-</span>' ?></div>
-                <div class="client-actions">
-                    <?php if ($c['url_dashboard']): ?>
-                        <a href="<?= safe($c['url_dashboard']) ?>" target="_blank" class="client-dash-link" title="Abrir dashboard del cliente">Dashboard &#8599;</a>
+    <div class="table-container">
+        <table class="crm-table" id="crmTable">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Rubro</th>
+                    <th>Plan</th>
+                    <th>Suscripción</th>
+                    <th>Estado Pago</th>
+                    <th>Responsable</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="crmTableBody">
+            <?php foreach ($clientes as $c): ?>
+            <tr data-tipo="<?= $c['tipo'] ?>" data-nombre="<?= safe(strtolower($c['nombre'])) ?>">
+                <td onclick="openClientDetail(<?= $c['id'] ?>)">
+                    <span class="td-nombre"><?= safe($c['nombre']) ?></span>
+                    <?php if ($c['tareas_pendientes'] > 0): ?>
+                        <span style="margin-left:6px;font-size:.65rem;padding:1px 6px;border-radius:10px;background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.25);color:#facc15"><?= $c['tareas_pendientes'] ?> tarea<?= $c['tareas_pendientes'] > 1 ? 's' : '' ?></span>
                     <?php endif; ?>
-                    <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Ficha PDF">PDF</button>
-                    <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Documento de servicio">Servicio</button>
+                </td>
+                <td style="color:var(--text-muted)"><?= safe($c['rubro'] ?: '—') ?></td>
+                <td>
+                    <?php if ($c['plan']): ?>
+                        <span class="badge-plan"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
+                    <?php else: ?>
+                        <span style="color:var(--text-muted);font-size:.78rem">Custom</span>
+                    <?php endif; ?>
+                </td>
+                <td class="td-fee">
+                    <?php if ($c['fee_mensual'] > 0): ?>
+                        <?= format_money($c['fee_mensual']) ?><span style="font-size:.7rem;font-weight:400;color:var(--text-muted)">/mes</span>
+                    <?php else: ?>
+                        <span style="color:var(--text-muted);font-weight:400">—</span>
+                    <?php endif; ?>
+                </td>
+                <td><span class="badge-pago-<?= safe($c['estado_pago']) ?>"><?= ucfirst($c['estado_pago']) ?></span></td>
+                <td onclick="event.stopPropagation()">
                     <?php if (can_edit($current_user['id'], 'crm')): ?>
-                        <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)" title="Editar">Editar</button>
+                        <select class="resp-select" onchange="changeResponsable(<?= $c['id'] ?>, this.value)" title="Cambiar responsable">
+                            <option value="">Sin asignar</option>
+                            <?php foreach ($equipo_list as $e): ?>
+                                <option value="<?= $e['id'] ?>" <?= $c['responsable_id'] == $e['id'] ? 'selected' : '' ?>><?= safe($e['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php else: ?>
+                        <span style="font-size:.82rem"><?= safe($c['responsable_nombre'] ?: '—') ?></span>
                     <?php endif; ?>
-                </div>
-            </div>
-        </div>
-        <?php endforeach; ?>
+                </td>
+                <td onclick="event.stopPropagation()">
+                    <div class="td-actions">
+                        <?php if ($c['url_dashboard']): ?>
+                            <a href="<?= safe($c['url_dashboard']) ?>" target="_blank" class="client-dash-link" title="Abrir dashboard del cliente">&#8599;</a>
+                        <?php endif; ?>
+                        <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Ficha PDF">Ficha PDF</button>
+                        <?php if (can_edit($current_user['id'], 'crm')): ?>
+                            <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)" title="Editar">Editar</button>
+                        <?php endif; ?>
+                    </div>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -184,14 +214,19 @@ function switchCrmTab(tab, btn) {
 function filterClients() {
     const q = document.getElementById('crmSearch').value.toLowerCase();
     const tipo = document.getElementById('filterTipo').value;
-    document.querySelectorAll('.client-card').forEach(card => {
-        const matchNombre = !q || card.dataset.nombre.includes(q);
-        const matchTipo = !tipo || card.dataset.tipo === tipo;
-        card.style.display = (matchNombre && matchTipo) ? '' : 'none';
+    document.querySelectorAll('#crmTableBody tr').forEach(row => {
+        const matchNombre = !q || row.dataset.nombre.includes(q);
+        const matchTipo = !tipo || row.dataset.tipo === tipo;
+        row.style.display = (matchNombre && matchTipo) ? '' : 'none';
     });
 }
 // Init filter
 filterClients();
+
+async function changeResponsable(clienteId, responsableId) {
+    await API.post('update_client', { id: clienteId, responsable_id: responsableId });
+    toast('Responsable actualizado');
+}
 
 async function openClientDetail(id) {
     const res = await API.get('get_client', { id });
@@ -278,7 +313,6 @@ async function openClientDetail(id) {
 
     const footer = `
         <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=${c.id}','_blank')">Ficha PDF</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=${c.id}','_blank')">Doc. Servicio</button>
         ${c.url_dashboard ? '<a href="' + escHtml(c.url_dashboard) + '" target="_blank" class="btn btn-secondary btn-sm">Dashboard &#8599;</a>' : ''}
         ${APP.canEdit ? '<button class="btn btn-primary btn-sm" onclick="Modal.close();editClient('+c.id+')">Editar</button>' : ''}
         <button class="btn btn-secondary" onclick="Modal.close()">Cerrar</button>`;

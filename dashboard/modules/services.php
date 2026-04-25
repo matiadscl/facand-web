@@ -1,14 +1,37 @@
 <?php
 /**
- * Módulo Servicios — Vista de servicios contratados por cliente
- * Tipos: suscripción (mensual), implementación (puntual), adicional
+ * Módulo Servicios + Presupuestos — Vista unificada
+ * Pestaña 1: Servicios activos contratados por cliente
+ * Pestaña 2: Presupuestos enviados a clientes
  */
 
-$filtro_tipo = $_GET['tipo_servicio'] ?? '';
-$filtro_estado = $_GET['estado_servicio'] ?? '';
+// Auto-crear tabla presupuestos si no existe
+$db = new SQLite3(__DIR__ . '/../data/dashboard.db');
+$db->exec('CREATE TABLE IF NOT EXISTS presupuestos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL,
+    nombre TEXT NOT NULL,
+    servicios_detalle TEXT DEFAULT "",
+    monto_total INTEGER DEFAULT 0,
+    estado TEXT DEFAULT "borrador",
+    fecha_emision TEXT,
+    fecha_validez TEXT,
+    notas TEXT DEFAULT "",
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+)');
+$db->close();
+
+$tab_activo = $_GET['tab'] ?? 'servicios';
+
+$filtro_tipo    = $_GET['tipo_servicio'] ?? '';
+$filtro_estado  = $_GET['estado_servicio'] ?? '';
+$filtro_pres    = $_GET['estado_presupuesto'] ?? '';
+
+// ---- Servicios ----
 $where = '1=1';
 $params = [];
-if ($filtro_tipo) { $where .= ' AND s.tipo = ?'; $params[] = $filtro_tipo; }
+if ($filtro_tipo)   { $where .= ' AND s.tipo = ?';   $params[] = $filtro_tipo; }
 if ($filtro_estado) { $where .= ' AND s.estado = ?'; $params[] = $filtro_estado; }
 
 $servicios = query_all("SELECT s.*, c.nombre as cliente_nombre
@@ -17,13 +40,29 @@ $servicios = query_all("SELECT s.*, c.nombre as cliente_nombre
     WHERE $where
     ORDER BY s.estado = 'activo' DESC, s.updated_at DESC", $params);
 
+// ---- Presupuestos ----
+$where_pres = '1=1';
+$params_pres = [];
+if ($filtro_pres) { $where_pres .= ' AND p.estado = ?'; $params_pres[] = $filtro_pres; }
+
+$presupuestos = query_all("SELECT p.*, c.nombre as cliente_nombre
+    FROM presupuestos p
+    LEFT JOIN clientes c ON p.cliente_id = c.id
+    WHERE $where_pres
+    ORDER BY p.created_at DESC", $params_pres);
+
 $clientes_list = query_all('SELECT id, nombre FROM clientes WHERE tipo IN ("activo","prospecto") ORDER BY nombre');
 
-// KPIs
-$total_activos = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
-$ingreso_suscripciones = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "activo" AND tipo = "suscripcion"') ?? 0;
+// KPIs servicios
+$total_activos          = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
+$ingreso_suscripciones  = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "activo" AND tipo = "suscripcion"') ?? 0;
 $total_implementaciones = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE tipo = "implementacion"') ?? 0;
-$total_servicios = query_scalar('SELECT COUNT(*) FROM servicios_cliente') ?? 0;
+$total_servicios        = query_scalar('SELECT COUNT(*) FROM servicios_cliente') ?? 0;
+
+// KPIs presupuestos
+$pres_enviados  = query_scalar('SELECT COUNT(*) FROM presupuestos WHERE estado = "enviado"') ?? 0;
+$pres_aceptados = query_scalar('SELECT COUNT(*) FROM presupuestos WHERE estado = "aceptado"') ?? 0;
+$pres_monto     = query_scalar('SELECT COALESCE(SUM(monto_total),0) FROM presupuestos WHERE estado = "aceptado"') ?? 0;
 
 // Reporte por tipo
 $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(monto),0) as total_monto FROM servicios_cliente GROUP BY tipo, estado ORDER BY tipo, estado');
@@ -32,23 +71,39 @@ $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(m
 <div class="kpi-grid">
     <div class="kpi-card" style="border-left:3px solid var(--primary)"><div class="kpi-label">Servicios Activos</div><div class="kpi-value"><?= $total_activos ?></div></div>
     <div class="kpi-card" style="border-left:3px solid var(--success)"><div class="kpi-label">Ingreso Suscripciones</div><div class="kpi-value success"><?= format_money($ingreso_suscripciones) ?></div><div class="kpi-sub">/mes</div></div>
-    <div class="kpi-card" style="border-left:3px solid var(--accent)"><div class="kpi-label">Implementaciones</div><div class="kpi-value"><?= $total_implementaciones ?></div></div>
-    <div class="kpi-card" style="border-left:3px solid var(--text-muted)"><div class="kpi-label">Total Servicios</div><div class="kpi-value"><?= $total_servicios ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--accent)"><div class="kpi-label">Presupuestos Enviados</div><div class="kpi-value"><?= $pres_enviados ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--text-muted)"><div class="kpi-label">Presup. Aceptados</div><div class="kpi-value success"><?= $pres_aceptados ?></div><div class="kpi-sub"><?= format_money($pres_monto) ?></div></div>
 </div>
 
+<!-- Tabs -->
+<div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);">
+    <a href="?page=services&tab=servicios&tipo_servicio=<?= $filtro_tipo ?>&estado_servicio=<?= $filtro_estado ?>"
+       style="padding:8px 20px;font-weight:600;font-size:.9rem;text-decoration:none;border-radius:6px 6px 0 0;
+              <?= $tab_activo !== 'presupuestos' ? 'background:var(--primary);color:#fff;' : 'color:var(--text-muted);' ?>">
+        Servicios Activos
+    </a>
+    <a href="?page=services&tab=presupuestos&estado_presupuesto=<?= $filtro_pres ?>"
+       style="padding:8px 20px;font-weight:600;font-size:.9rem;text-decoration:none;border-radius:6px 6px 0 0;
+              <?= $tab_activo === 'presupuestos' ? 'background:var(--primary);color:#fff;' : 'color:var(--text-muted);' ?>">
+        Presupuestos
+    </a>
+</div>
+
+<?php if ($tab_activo !== 'presupuestos'): ?>
+<!-- ========== TAB SERVICIOS ACTIVOS ========== -->
 <div class="filters-bar">
-    <select class="form-select" onchange="location.href='?page=services&tipo_servicio='+this.value+'&estado_servicio=<?= $filtro_estado ?>'">
+    <select class="form-select" onchange="location.href='?page=services&tab=servicios&tipo_servicio='+this.value+'&estado_servicio=<?= $filtro_estado ?>'">
         <option value="">Todos los tipos</option>
-        <option value="suscripcion" <?= $filtro_tipo === 'suscripcion' ? 'selected' : '' ?>>Suscripción</option>
-        <option value="implementacion" <?= $filtro_tipo === 'implementacion' ? 'selected' : '' ?>>Implementación</option>
-        <option value="adicional" <?= $filtro_tipo === 'adicional' ? 'selected' : '' ?>>Adicional</option>
+        <option value="suscripcion"   <?= $filtro_tipo === 'suscripcion'   ? 'selected' : '' ?>>Suscripción</option>
+        <option value="implementacion"<?= $filtro_tipo === 'implementacion' ? 'selected' : '' ?>>Implementación</option>
+        <option value="adicional"     <?= $filtro_tipo === 'adicional'      ? 'selected' : '' ?>>Adicional</option>
     </select>
-    <select class="form-select" onchange="location.href='?page=services&tipo_servicio=<?= $filtro_tipo ?>&estado_servicio='+this.value">
+    <select class="form-select" onchange="location.href='?page=services&tab=servicios&tipo_servicio=<?= $filtro_tipo ?>&estado_servicio='+this.value">
         <option value="">Todos los estados</option>
-        <option value="activo" <?= $filtro_estado === 'activo' ? 'selected' : '' ?>>Activo</option>
-        <option value="pausado" <?= $filtro_estado === 'pausado' ? 'selected' : '' ?>>Pausado</option>
+        <option value="activo"     <?= $filtro_estado === 'activo'     ? 'selected' : '' ?>>Activo</option>
+        <option value="pausado"    <?= $filtro_estado === 'pausado'    ? 'selected' : '' ?>>Pausado</option>
         <option value="finalizado" <?= $filtro_estado === 'finalizado' ? 'selected' : '' ?>>Finalizado</option>
-        <option value="cancelado" <?= $filtro_estado === 'cancelado' ? 'selected' : '' ?>>Cancelado</option>
+        <option value="cancelado"  <?= $filtro_estado === 'cancelado'  ? 'selected' : '' ?>>Cancelado</option>
     </select>
 </div>
 
@@ -116,9 +171,75 @@ $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(m
     </div>
 </div>
 
+<?php else: ?>
+<!-- ========== TAB PRESUPUESTOS ========== -->
+<div class="filters-bar">
+    <select class="form-select" onchange="location.href='?page=services&tab=presupuestos&estado_presupuesto='+this.value">
+        <option value="">Todos los estados</option>
+        <option value="borrador"  <?= $filtro_pres === 'borrador'  ? 'selected' : '' ?>>Borrador</option>
+        <option value="enviado"   <?= $filtro_pres === 'enviado'   ? 'selected' : '' ?>>Enviado</option>
+        <option value="aceptado"  <?= $filtro_pres === 'aceptado'  ? 'selected' : '' ?>>Aceptado</option>
+        <option value="rechazado" <?= $filtro_pres === 'rechazado' ? 'selected' : '' ?>>Rechazado</option>
+    </select>
+</div>
+
+<div class="table-container">
+    <div class="table-header">
+        <span class="table-title">Presupuestos</span>
+        <?php if (can_edit($current_user['id'], 'services')): ?>
+            <button class="btn btn-primary btn-sm" onclick="openNewPresupuesto()">+ Nuevo Presupuesto</button>
+        <?php endif; ?>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Cliente</th>
+                <th>Servicios</th>
+                <th>Monto Total</th>
+                <th>Estado</th>
+                <th>Emisión</th>
+                <th>Válido hasta</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($presupuestos as $pr):
+            $badge_pres = match($pr['estado']) {
+                'aceptado'  => 'status-success',
+                'enviado'   => 'status-info',
+                'rechazado' => 'status-danger',
+                default     => 'status-muted',
+            };
+            $vencido = $pr['estado'] === 'enviado' && $pr['fecha_validez'] && strtotime($pr['fecha_validez']) < time();
+        ?>
+            <tr>
+                <td><strong><?= safe($pr['nombre']) ?></strong></td>
+                <td><?= safe($pr['cliente_nombre']) ?></td>
+                <td style="font-size:.8rem;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= safe($pr['servicios_detalle']) ?></td>
+                <td style="font-weight:600"><?= format_money($pr['monto_total']) ?></td>
+                <td><span class="badge <?= $badge_pres ?>"><?= ucfirst($pr['estado']) ?></span></td>
+                <td style="font-size:.82rem"><?= $pr['fecha_emision'] ? format_date($pr['fecha_emision']) : '-' ?></td>
+                <td style="font-size:.82rem;<?= $vencido ? 'color:var(--danger);font-weight:600' : '' ?>"><?= $pr['fecha_validez'] ? format_date($pr['fecha_validez']) : '-' ?></td>
+                <td>
+                    <?php if (can_edit($current_user['id'], 'services')): ?>
+                        <button class="btn btn-secondary btn-sm" onclick="editPresupuesto(<?= $pr['id'] ?>)">Editar</button>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($presupuestos)): ?>
+            <tr><td colspan="8" class="empty-state">No hay presupuestos. Usa "+ Nuevo Presupuesto" para crear uno.</td></tr>
+        <?php endif; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
 <script>
 const sClientesList = <?= json_encode(array_column($clientes_list, 'nombre', 'id')) ?>;
 
+// ---- Servicios ----
 function openNewService() {
     const body = `<form id="frmService" class="form-grid">
         ${formField('cliente_id', 'Cliente', 'select', '', {required: true, options: sClientesList})}
@@ -165,5 +286,56 @@ async function updateService() {
     const data = getFormData('frmService');
     const res = await API.post('update_service', data);
     if (res) { toast('Servicio actualizado'); refreshPage(); }
+}
+
+// ---- Presupuestos ----
+function openNewPresupuesto() {
+    const today = new Date().toISOString().split('T')[0];
+    const validity = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+    const body = `<form id="frmPresupuesto" class="form-grid">
+        ${formField('cliente_id', 'Cliente', 'select', '', {required: true, options: sClientesList})}
+        ${formField('nombre', 'Nombre / título del presupuesto', 'text', '', {required: true, fullWidth: true})}
+        ${formField('servicios_detalle', 'Servicios incluidos', 'textarea', '', {fullWidth: true})}
+        ${formField('monto_total', 'Monto total ($)', 'number', '', {required: true})}
+        ${formField('estado', 'Estado', 'select', 'borrador', {options: {borrador:'Borrador', enviado:'Enviado', aceptado:'Aceptado', rechazado:'Rechazado'}})}
+        ${formField('fecha_emision', 'Fecha de emisión', 'date', today)}
+        ${formField('fecha_validez', 'Válido hasta', 'date', validity)}
+        ${formField('notas', 'Notas internas', 'textarea', '', {fullWidth: true})}
+    </form>`;
+    Modal.open('Nuevo Presupuesto', body,
+        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
+         <button class="btn btn-primary" onclick="savePresupuesto()">Guardar</button>`);
+}
+
+async function savePresupuesto() {
+    const data = getFormData('frmPresupuesto');
+    const res = await API.post('create_presupuesto', data);
+    if (res) { toast('Presupuesto creado'); refreshPage(); }
+}
+
+async function editPresupuesto(id) {
+    const res = await API.get('get_presupuesto', { id });
+    if (!res) return;
+    const p = res.data;
+    const body = `<form id="frmPresupuesto" class="form-grid">
+        <input type="hidden" name="id" value="${p.id}">
+        ${formField('cliente_id', 'Cliente', 'select', p.cliente_id, {options: sClientesList})}
+        ${formField('nombre', 'Nombre / título del presupuesto', 'text', p.nombre, {fullWidth: true})}
+        ${formField('servicios_detalle', 'Servicios incluidos', 'textarea', p.servicios_detalle, {fullWidth: true})}
+        ${formField('monto_total', 'Monto total ($)', 'number', p.monto_total)}
+        ${formField('estado', 'Estado', 'select', p.estado, {options: {borrador:'Borrador', enviado:'Enviado', aceptado:'Aceptado', rechazado:'Rechazado'}})}
+        ${formField('fecha_emision', 'Fecha de emisión', 'date', p.fecha_emision || '')}
+        ${formField('fecha_validez', 'Válido hasta', 'date', p.fecha_validez || '')}
+        ${formField('notas', 'Notas internas', 'textarea', p.notas, {fullWidth: true})}
+    </form>`;
+    Modal.open('Editar Presupuesto', body,
+        `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
+         <button class="btn btn-primary" onclick="updatePresupuesto()">Actualizar</button>`);
+}
+
+async function updatePresupuesto() {
+    const data = getFormData('frmPresupuesto');
+    const res = await API.post('update_presupuesto', data);
+    if (res) { toast('Presupuesto actualizado'); refreshPage(); }
 }
 </script>

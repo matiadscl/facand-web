@@ -185,8 +185,12 @@ async function extractPdfData(input) {
     formData.append('csrf_token', APP.csrf);
     formData.append('pdf', files[0]);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     try {
-        const res = await fetch('api/data.php', { method: 'POST', body: formData });
+        const res = await fetch('api/data.php', { method: 'POST', body: formData, signal: controller.signal });
+        clearTimeout(timeoutId);
         const json = await res.json();
         if (json.ok) {
             extractedData = json.data;
@@ -206,16 +210,16 @@ async function extractPdfData(input) {
             } else {
                 resultDiv.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;">No se encontraron datos en el PDF. Completa manualmente en el siguiente paso.</div>`;
             }
-            document.getElementById('btnStep1').disabled = false;
         } else {
             resultDiv.innerHTML = `<div style="color:var(--warning);font-size:.82rem;">${escHtml(json.error || 'Error al procesar')}. Puedes continuar y completar manualmente.</div>`;
             extractedData = {};
-            document.getElementById('btnStep1').disabled = false;
         }
     } catch(e) {
+        clearTimeout(timeoutId);
         console.error('Extract error:', e);
-        resultDiv.innerHTML = '<div style="color:var(--text-muted);font-size:.82rem;">No se pudo leer el PDF automaticamente. Completa los campos en el siguiente paso.</div>';
+        resultDiv.innerHTML = '<div style="color:var(--text-muted);font-size:.82rem;">No se pudo leer el PDF. Completa manualmente.</div>';
         extractedData = {};
+    } finally {
         document.getElementById('btnStep1').disabled = false;
     }
 }
@@ -273,7 +277,27 @@ function openUploadStep2(files) {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div class="form-group">
                 <label class="form-label">Período del servicio *</label>
-                <input type="month" name="periodo_servicio" class="form-input" value="${new Date().toISOString().slice(0,7)}" required>
+                <div style="display:flex;gap:8px;">
+                    <select name="periodo_mes" class="form-select" style="flex:1" id="periodoMesUpload">
+                        <option value="01">Enero</option>
+                        <option value="02">Febrero</option>
+                        <option value="03">Marzo</option>
+                        <option value="04">Abril</option>
+                        <option value="05">Mayo</option>
+                        <option value="06">Junio</option>
+                        <option value="07">Julio</option>
+                        <option value="08">Agosto</option>
+                        <option value="09">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                    </select>
+                    <select name="periodo_anio" class="form-select" style="width:100px">
+                        <option value="2025">2025</option>
+                        <option value="2026" selected>2026</option>
+                        <option value="2027">2027</option>
+                    </select>
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">Fecha Emisión</label>
@@ -316,6 +340,15 @@ function openUploadStep2(files) {
     Modal.open('Confirmar Factura', body,
         `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
          <button class="btn btn-primary" onclick="submitUpload()" id="btnUpload">Crear Factura</button>`);
+
+    // Auto-select current month in periodo selects
+    setTimeout(() => {
+        const mesEl = document.getElementById('periodoMesUpload');
+        if (mesEl) {
+            const now = new Date();
+            mesEl.value = String(now.getMonth() + 1).padStart(2, '0');
+        }
+    }, 50);
 
     // Auto-trigger client change if pre-selected
     if (extractedData.cliente_sugerido) {
@@ -408,7 +441,9 @@ async function submitUpload() {
     formData.append('monto', monto);
     formData.append('impuesto', form.querySelector('[name="impuesto"]').value || '0');
     formData.append('fecha_emision', form.querySelector('[name="fecha_emision"]').value || '');
-    formData.append('periodo_servicio', form.querySelector('[name="periodo_servicio"]').value || '');
+    const periodoAnio = form.querySelector('[name="periodo_anio"]').value;
+    const periodoMes = form.querySelector('[name="periodo_mes"]').value;
+    formData.append('periodo_servicio', periodoAnio && periodoMes ? periodoAnio + '-' + periodoMes : '');
     formData.append('estado_pago', form.querySelector('[name="estado_pago"]').value);
     formData.append('fecha_pago', form.querySelector('[name="fecha_pago"]')?.value || '');
     formData.append('metodo_pago', form.querySelector('[name="metodo_pago"]')?.value || 'transferencia');
@@ -419,8 +454,12 @@ async function submitUpload() {
         formData.append('archivos[]', files[i]);
     }
 
+    const uploadController = new AbortController();
+    const uploadTimeout = setTimeout(() => uploadController.abort(), 30000);
+
     try {
-        const res = await fetch('api/data.php', { method: 'POST', body: formData });
+        const res = await fetch('api/data.php', { method: 'POST', body: formData, signal: uploadController.signal });
+        clearTimeout(uploadTimeout);
         const json = await res.json();
         if (json.ok) {
             let msg = `Factura ${json.data.numero} creada`;
@@ -433,11 +472,12 @@ async function submitUpload() {
             toast(json.error || 'Error al procesar', 'error');
         }
     } catch (e) {
-        toast('Error de conexion', 'error');
+        clearTimeout(uploadTimeout);
+        toast('Error de conexion. Intenta nuevamente.', 'error');
         console.error(e);
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Subir y Crear Factura';
+        btn.textContent = 'Crear Factura';
     }
 }
 
@@ -453,7 +493,30 @@ function openNewInvoice() {
         ${formField('monto', 'Monto Neto', 'number', '', {required: true})}
         ${formField('impuesto', 'IVA (19%)', 'number', '')}
         ${formField('estado', 'Estado', 'select', 'emitida', {options: {borrador:'Borrador', emitida:'Emitida'}})}
-        ${formField('periodo_servicio', 'Período del servicio', 'month', new Date().toISOString().slice(0,7), {required: true})}
+        <div class="form-group">
+            <label class="form-label">Período del servicio *</label>
+            <div style="display:flex;gap:8px;">
+                <select name="periodo_mes" class="form-select" style="flex:1" id="periodoMesManual">
+                    <option value="01">Enero</option>
+                    <option value="02">Febrero</option>
+                    <option value="03">Marzo</option>
+                    <option value="04">Abril</option>
+                    <option value="05">Mayo</option>
+                    <option value="06">Junio</option>
+                    <option value="07">Julio</option>
+                    <option value="08">Agosto</option>
+                    <option value="09">Septiembre</option>
+                    <option value="10">Octubre</option>
+                    <option value="11">Noviembre</option>
+                    <option value="12">Diciembre</option>
+                </select>
+                <select name="periodo_anio" class="form-select" style="width:100px" id="periodoAnioManual">
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                    <option value="2027">2027</option>
+                </select>
+            </div>
+        </div>
         ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
         ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date')}
         ${formField('detalle', 'Detalle', 'textarea', '', {fullWidth: true})}
@@ -465,11 +528,18 @@ function openNewInvoice() {
         const m = document.querySelector('#frmInvoice [name="monto"]');
         const i = document.querySelector('#frmInvoice [name="impuesto"]');
         if (m && i) m.addEventListener('input', () => { i.value = Math.round(parseInt(m.value||0)*0.19); });
+        const mesEl = document.getElementById('periodoMesManual');
+        if (mesEl) mesEl.value = String(new Date().getMonth() + 1).padStart(2, '0');
     }, 100);
 }
 
 async function saveInvoice() {
     const data = getFormData('frmInvoice');
+    const mesEl = document.getElementById('periodoMesManual');
+    const anioEl = document.getElementById('periodoAnioManual');
+    if (mesEl && anioEl) {
+        data.periodo_servicio = anioEl.value + '-' + mesEl.value;
+    }
     data.total = parseInt(data.monto||0) + parseInt(data.impuesto||0);
     const res = await API.post('create_invoice', data);
     if (res) { toast('Factura creada. CxC generada automaticamente.'); refreshPage(); }

@@ -20,6 +20,16 @@ $facturado_mes     = query_scalar('SELECT COALESCE(SUM(total),0) FROM facturas W
 $cobrado_mes       = query_scalar('SELECT COALESCE(SUM(monto),0) FROM abonos WHERE strftime("%Y-%m", fecha) = strftime("%Y-%m", "now")') ?? 0;
 $por_cobrar        = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial")') ?? 0;
 $proyectos_activos = query_scalar('SELECT COUNT(*) FROM proyectos WHERE estado = "activo"') ?? 0;
+$clientes_nuevos   = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND strftime("%Y-%m", created_at) = strftime("%Y-%m", "now")') ?? 0;
+$clientes_pausados = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "inactivo"') ?? 0;
+$clientes_perdidos = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "cerrado"') ?? 0;
+
+// Chart data: facturación últimos 6 meses
+$fact_6meses_raw = query_all("SELECT strftime('%Y-%m', fecha_emision) as mes, SUM(total) as total FROM facturas WHERE estado != 'anulada' GROUP BY mes ORDER BY mes DESC LIMIT 6");
+$fact_6meses = array_reverse($fact_6meses_raw);
+
+// Chart data: clientes por etapa pipeline
+$clientes_por_etapa = query_all("SELECT etapa_pipeline, COUNT(*) as total FROM clientes WHERE tipo IN ('activo','prospecto') AND etapa_pipeline IS NOT NULL AND etapa_pipeline != '' GROUP BY etapa_pipeline ORDER BY total DESC");
 
 // Alertas
 $alertas = [];
@@ -47,30 +57,113 @@ $actividad = query_all('SELECT a.*, u.nombre as usuario FROM actividad a LEFT JO
 $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
 ?>
 
+<!-- KPI Row 1 — 5 cards principales -->
 <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
-    <div class="kpi-card" style="border-left: 3px solid var(--accent);">
-        <div class="kpi-label">Suscripción Mensual</div>
-        <div class="kpi-value" style="color: var(--accent);"><?= format_money($fee_mensual_total) ?></div>
-        <div class="kpi-sub"><?= $total_clientes ?> clientes activos</div>
+    <a href="?page=billing" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--accent);cursor:pointer;">
+            <div class="kpi-label">Facturación Proyectada</div>
+            <div class="kpi-value" style="color: var(--accent);"><?= format_money($fee_mensual_total) ?></div>
+            <div class="kpi-sub"><?= $total_clientes ?> clientes activos</div>
+        </div>
+    </a>
+    <a href="?page=receivables" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--success);cursor:pointer;">
+            <div class="kpi-label">Cobrado Este Mes</div>
+            <div class="kpi-value success"><?= format_money($cobrado_mes) ?></div>
+            <div class="kpi-sub">Facturado: <?= format_money($facturado_mes) ?></div>
+        </div>
+    </a>
+    <a href="?page=receivables" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid <?= $por_cobrar > 0 ? 'var(--warning)' : 'var(--success)' ?>;cursor:pointer;">
+            <div class="kpi-label">Por Cobrar</div>
+            <div class="kpi-value <?= $por_cobrar > 0 ? 'warning' : 'success' ?>"><?= format_money($por_cobrar) ?></div>
+            <div class="kpi-sub"><?= $pagos_pendientes ?> pendientes<?= $pagos_vencidos > 0 ? " · <span style='color:var(--danger)'>{$pagos_vencidos} vencidos</span>" : '' ?></div>
+        </div>
+    </a>
+    <a href="?page=crm" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--text-muted);cursor:pointer;">
+            <div class="kpi-label">Clientes Activos</div>
+            <div class="kpi-value"><?= $total_clientes ?></div>
+            <div class="kpi-sub"><?= $proyectos_activos ?> proyectos activos</div>
+        </div>
+    </a>
+    <a href="?page=crm" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--accent);cursor:pointer;">
+            <div class="kpi-label">Clientes Nuevos Este Mes</div>
+            <div class="kpi-value" style="color:var(--accent);"><?= $clientes_nuevos ?></div>
+            <div class="kpi-sub">incorporados en <?= date('M Y') ?></div>
+        </div>
+    </a>
+</div>
+
+<!-- KPI Row 2 — 3 cards secundarias -->
+<div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);margin-top:10px;">
+    <a href="?page=crm" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--text-muted);padding:10px 16px;cursor:pointer;">
+            <div class="kpi-label" style="font-size:.72rem;">Clientes Pausados</div>
+            <div class="kpi-value" style="font-size:1.4rem;"><?= $clientes_pausados ?></div>
+        </div>
+    </a>
+    <a href="?page=crm" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid var(--danger);padding:10px 16px;cursor:pointer;">
+            <div class="kpi-label" style="font-size:.72rem;">Clientes Perdidos</div>
+            <div class="kpi-value" style="font-size:1.4rem;color:var(--danger);"><?= $clientes_perdidos ?></div>
+        </div>
+    </a>
+    <a href="?page=tasks" style="text-decoration:none;color:inherit;">
+        <div class="kpi-card" style="border-left: 3px solid <?= $tareas_atrasadas > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>;padding:10px 16px;cursor:pointer;">
+            <div class="kpi-label" style="font-size:.72rem;">Tareas Atrasadas</div>
+            <div class="kpi-value" style="font-size:1.4rem;<?= $tareas_atrasadas > 0 ? 'color:var(--danger);' : '' ?>"><?= $tareas_atrasadas ?></div>
+            <div class="kpi-sub" style="font-size:.68rem;"><?= $tareas_pendientes ?> pendientes en total</div>
+        </div>
+    </a>
+</div>
+
+<!-- Charts -->
+<div class="grid-2" style="margin-top:24px;margin-bottom:24px;">
+    <!-- Facturación últimos 6 meses -->
+    <div class="chart-container">
+        <div class="chart-title">Facturación Últimos 6 Meses</div>
+        <?php if (!empty($fact_6meses)): ?>
+        <div class="bar-chart">
+            <?php
+            $max_fact = max(array_column($fact_6meses, 'total')) ?: 1;
+            foreach ($fact_6meses as $fm):
+                $h = round($fm['total'] / $max_fact * 100);
+                $mes_label = isset($meses_es[substr($fm['mes'], 5)]) ? $meses_es[substr($fm['mes'], 5)] : substr($fm['mes'], 5);
+            ?>
+            <div class="bar-item">
+                <div class="bar-value"><?= format_money($fm['total']) ?></div>
+                <div class="bar" style="height:<?= $h ?>%;background:var(--accent);"></div>
+                <div class="bar-label"><?= $mes_label ?></div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php else: ?>
+            <div class="empty-state"><p>Sin datos de facturación</p></div>
+        <?php endif; ?>
     </div>
-    <div class="kpi-card" style="border-left: 3px solid var(--success);">
-        <div class="kpi-label">Cobrado Este Mes</div>
-        <div class="kpi-value success"><?= format_money($cobrado_mes) ?></div>
-        <div class="kpi-sub">Facturado: <?= format_money($facturado_mes) ?></div>
-    </div>
-    <div class="kpi-card" style="border-left: 3px solid <?= $por_cobrar > 0 ? 'var(--warning)' : 'var(--success)' ?>;">
-        <div class="kpi-label">Por Cobrar</div>
-        <div class="kpi-value <?= $por_cobrar > 0 ? 'warning' : 'success' ?>"><?= format_money($por_cobrar) ?></div>
-        <div class="kpi-sub"><?= $pagos_pendientes ?> pendientes<?= $pagos_vencidos > 0 ? " · <span style='color:var(--danger)'>{$pagos_vencidos} vencidos</span>" : '' ?></div>
-    </div>
-    <div class="kpi-card" style="border-left: 3px solid <?= $tareas_atrasadas > 0 ? 'var(--danger)' : 'var(--text-muted)' ?>;">
-        <div class="kpi-label">Tareas</div>
-        <div class="kpi-value"><?= $tareas_pendientes ?></div>
-        <div class="kpi-sub"><?= $tareas_atrasadas > 0 ? "<span style='color:var(--danger)'>{$tareas_atrasadas} atrasadas</span>" : 'Ninguna atrasada' ?> · <?= $proyectos_activos ?> proyectos</div>
-    </div>
-    <div class="kpi-card" style="border-left: 3px solid var(--text-muted);">
-        <div class="kpi-label">Clientes Activos</div>
-        <div class="kpi-value"><?= $total_clientes ?></div>
+
+    <!-- Clientes por etapa pipeline -->
+    <div class="chart-container">
+        <div class="chart-title">Clientes por Etapa</div>
+        <?php if (!empty($clientes_por_etapa)): ?>
+        <?php
+        $max_etapa = max(array_column($clientes_por_etapa, 'total')) ?: 1;
+        foreach ($clientes_por_etapa as $ep):
+            $w = round($ep['total'] / $max_etapa * 100);
+        ?>
+        <div class="bar-item" style="flex-direction:row;align-items:center;gap:10px;height:auto;margin-bottom:10px;">
+            <div class="bar-label" style="width:120px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="<?= safe($ep['etapa_pipeline']) ?>"><?= safe($ep['etapa_pipeline']) ?></div>
+            <div style="flex:1;background:var(--bg);border-radius:4px;height:18px;overflow:hidden;">
+                <div style="width:<?= $w ?>%;height:100%;background:var(--accent);border-radius:4px;"></div>
+            </div>
+            <div class="bar-value" style="width:28px;text-align:left;"><?= $ep['total'] ?></div>
+        </div>
+        <?php endforeach; ?>
+        <?php else: ?>
+            <div class="empty-state"><p>Sin datos de etapas</p></div>
+        <?php endif; ?>
     </div>
 </div>
 
