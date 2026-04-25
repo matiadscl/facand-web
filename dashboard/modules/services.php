@@ -126,7 +126,9 @@ function showDesglose(idx) {
     let html = '<table style="width:100%;font-size:.85rem;border-collapse:collapse;">';
     html += '<thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Cliente</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Servicio</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Tipo</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Monto</th></tr></thead><tbody>';
     m.desglose.forEach(d => {
-        const tipo = d.tipo === 'suscripcion' ? '<span style="color:var(--accent);font-size:.72rem;">Suscripción</span>' : '<span style="color:#facc15;font-size:.72rem;">Implementación</span>';
+        const tipoLabels = {suscripcion:'Suscripción', implementacion:'Implementación', adicional:'Adicional'};
+        const tipoColors = {suscripcion:'var(--accent)', implementacion:'#facc15', adicional:'#38bdf8'};
+        const tipo = `<span style="color:${tipoColors[d.tipo] || 'var(--text-muted)'};font-size:.72rem;">${tipoLabels[d.tipo] || d.tipo}</span>`;
         html += `<tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${escHtml(d.cliente)}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${escHtml(d.servicio)}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${tipo}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);text-align:right;font-weight:600;">${fmtMoney(d.monto)}</td></tr>`;
     });
     html += `</tbody><tfoot><tr><td colspan="3" style="padding:8px;font-weight:700;border-top:2px solid var(--border);">Total</td><td style="padding:8px;font-weight:700;text-align:right;border-top:2px solid var(--border);color:var(--success);">${fmtMoney(m.monto)}</td></tr></tfoot></table>`;
