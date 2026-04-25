@@ -285,6 +285,24 @@ switch ($action) {
         respond();
         break;
 
+    // ---- INTERACCIONES ----
+    case 'get_interactions':
+        $cliente_id = input_int('cliente_id');
+        $interactions = query_all('SELECT i.*, e.nombre as responsable_nombre FROM interacciones i LEFT JOIN equipo e ON i.responsable_id = e.id WHERE i.cliente_id = ? ORDER BY i.fecha DESC LIMIT 50', [$cliente_id]);
+        respond($interactions);
+        break;
+
+    case 'create_interaction':
+        if (!can_edit($user_id, 'crm')) fail('Sin permiso');
+        $cliente_id = input_int('cliente_id');
+        $contenido = input('contenido');
+        if (!$cliente_id || empty($contenido)) fail('Cliente y contenido son obligatorios');
+        db_execute('INSERT INTO interacciones (cliente_id, tipo, contenido, resultado, responsable_id, fecha) VALUES (?, ?, ?, ?, ?, ?)',
+            [$cliente_id, input('tipo') ?: 'nota', $contenido, input('resultado'), input_int_null('responsable_id'), input('fecha') ?: date('Y-m-d H:i:s')]);
+        log_activity('crm', "Interacción registrada: " . substr($contenido, 0, 50), $cliente_id);
+        respond(['id' => last_id()]);
+        break;
+
     // ---- MARKETING ----
     case 'create_campaign':
         if (!can_edit($user_id, 'marketing')) fail('Sin permiso');

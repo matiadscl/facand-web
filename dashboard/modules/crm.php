@@ -45,7 +45,35 @@ $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta
 .client-dash-link:hover { background:rgba(249,115,22,.2); }
 
 @media(max-width:768px) { .crm-kpis { grid-template-columns:repeat(2,1fr); } .crm-grid { grid-template-columns:1fr; } }
+
+/* Tabs CRM */
+.crm-tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.crm-tab { padding:8px 18px; font-size:.85rem; font-weight:500; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); cursor:pointer; transition:all .15s; margin-bottom:-1px; }
+.crm-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.crm-tab:hover:not(.active) { color:var(--text); }
+.crm-tab-content { display:none; }
+.crm-tab-content.active { display:block; }
+
+/* Interacciones */
+.interaction-item { padding:10px 0; border-bottom:1px solid var(--border); font-size:.82rem; }
+.interaction-item:last-child { border-bottom:none; }
+.interaction-tipo { display:inline-block; font-size:.68rem; padding:2px 7px; border-radius:4px; background:rgba(249,115,22,.1); border:1px solid rgba(249,115,22,.2); color:var(--accent); margin-right:6px; text-transform:uppercase; letter-spacing:.3px; }
+.interaction-fecha { font-size:.7rem; color:var(--text-muted); }
+.interaction-contenido { margin-top:4px; color:var(--text); }
+.interaction-resultado { margin-top:2px; font-size:.78rem; color:var(--text-muted); font-style:italic; }
 </style>
+
+<?php
+// Agrupar clientes por etapa_pipeline para el kanban
+$pipeline_stages = ['lead'=>'Lead','contactado'=>'Contactado','propuesta'=>'Propuesta','negociacion'=>'Negociación','onboarding'=>'Onboarding','activo'=>'Activo','cerrado_ganado'=>'Cerrado Ganado','cerrado_perdido'=>'Cerrado Perdido'];
+$clientes_por_etapa = [];
+foreach ($pipeline_stages as $key => $_) $clientes_por_etapa[$key] = [];
+foreach ($clientes as $c) {
+    $etapa = $c['etapa_pipeline'] ?: 'lead';
+    if (!isset($clientes_por_etapa[$etapa])) $etapa = 'lead';
+    $clientes_por_etapa[$etapa][] = $c;
+}
+?>
 
 <div class="crm-kpis">
     <div class="crm-kpi" style="border-left:3px solid var(--accent)"><div class="crm-kpi-label">Clientes Activos</div><div class="crm-kpi-val"><?= $activos ?></div></div>
@@ -54,61 +82,104 @@ $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta
     <div class="crm-kpi" style="border-left:3px solid var(--text-muted)"><div class="crm-kpi-label">Total Clientes</div><div class="crm-kpi-val"><?= count($clientes) ?></div></div>
 </div>
 
-<div class="crm-toolbar">
-    <input type="text" class="crm-search" id="crmSearch" placeholder="Buscar cliente..." oninput="filterClients()">
-    <select class="form-select" style="font-size:.82rem;padding:6px 10px;" id="filterTipo" onchange="filterClients()">
-        <option value="">Todos</option>
-        <option value="activo" selected>Activos</option>
-        <option value="inactivo">Inactivos</option>
-        <option value="prospecto">Prospectos</option>
-    </select>
-    <?php if (can_edit($current_user['id'], 'crm')): ?>
-        <button class="btn btn-primary btn-sm" onclick="openNewClient()">+ Nuevo Cliente</button>
-    <?php endif; ?>
+<div class="crm-tabs">
+    <button class="crm-tab active" onclick="switchCrmTab('cards', this)">Clientes</button>
+    <button class="crm-tab" onclick="switchCrmTab('pipeline', this)">Pipeline</button>
 </div>
 
-<div class="crm-grid" id="crmGrid">
-    <?php foreach ($clientes as $c): ?>
-    <div class="client-card" data-tipo="<?= $c['tipo'] ?>" data-nombre="<?= safe(strtolower($c['nombre'])) ?>" onclick="openClientDetail(<?= $c['id'] ?>)">
-        <div class="client-card-top">
-            <div class="client-avatar"><?= strtoupper(mb_substr($c['nombre'], 0, 2)) ?></div>
-            <div>
-                <div class="client-name"><?= safe($c['nombre']) ?></div>
-                <div class="client-rubro"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
-            </div>
-        </div>
-        <div class="client-meta">
-            <?php if ($c['plan']): ?>
-                <span class="client-tag client-tag-plan"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
-            <?php endif; ?>
-            <span class="client-tag client-tag-pago-<?= $c['estado_pago'] ?>"><?= ucfirst($c['estado_pago']) ?></span>
-            <?php if ($c['etapa']): ?>
-                <span class="client-tag"><?= safe($c['etapa']) ?></span>
-            <?php endif; ?>
-            <?php if ($c['tareas_pendientes'] > 0): ?>
-                <span class="client-tag" style="color:var(--warning)"><?= $c['tareas_pendientes'] ?> tareas</span>
-            <?php endif; ?>
-        </div>
-        <div class="client-bottom" onclick="event.stopPropagation()">
-            <div class="client-fee"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) . '<span style="font-size:.7rem;font-weight:400;color:var(--text-muted)">/mes</span>' : '<span style="color:var(--text-muted);font-size:.82rem">-</span>' ?></div>
-            <div class="client-actions">
-                <?php if ($c['url_dashboard']): ?>
-                    <a href="<?= safe($c['url_dashboard']) ?>" target="_blank" class="client-dash-link" title="Abrir dashboard del cliente">Dashboard &#8599;</a>
-                <?php endif; ?>
-                <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Ficha PDF">PDF</button>
-                <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Documento de servicio">Servicio</button>
-                <?php if (can_edit($current_user['id'], 'crm')): ?>
-                    <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)" title="Editar">Editar</button>
-                <?php endif; ?>
-            </div>
-        </div>
+<!-- Vista Clientes (tarjetas) -->
+<div id="crmTabCards" class="crm-tab-content active">
+    <div class="crm-toolbar">
+        <input type="text" class="crm-search" id="crmSearch" placeholder="Buscar cliente..." oninput="filterClients()">
+        <select class="form-select" style="font-size:.82rem;padding:6px 10px;" id="filterTipo" onchange="filterClients()">
+            <option value="">Todos</option>
+            <option value="activo" selected>Activos</option>
+            <option value="inactivo">Inactivos</option>
+            <option value="prospecto">Prospectos</option>
+        </select>
+        <?php if (can_edit($current_user['id'], 'crm')): ?>
+            <button class="btn btn-primary btn-sm" onclick="openNewClient()">+ Nuevo Cliente</button>
+        <?php endif; ?>
     </div>
-    <?php endforeach; ?>
+
+    <div class="crm-grid" id="crmGrid">
+        <?php foreach ($clientes as $c): ?>
+        <div class="client-card" data-tipo="<?= $c['tipo'] ?>" data-nombre="<?= safe(strtolower($c['nombre'])) ?>" onclick="openClientDetail(<?= $c['id'] ?>)">
+            <div class="client-card-top">
+                <div class="client-avatar"><?= strtoupper(mb_substr($c['nombre'], 0, 2)) ?></div>
+                <div>
+                    <div class="client-name"><?= safe($c['nombre']) ?></div>
+                    <div class="client-rubro"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
+                </div>
+            </div>
+            <div class="client-meta">
+                <?php if ($c['plan']): ?>
+                    <span class="client-tag client-tag-plan"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
+                <?php endif; ?>
+                <span class="client-tag client-tag-pago-<?= $c['estado_pago'] ?>"><?= ucfirst($c['estado_pago']) ?></span>
+                <?php if ($c['etapa']): ?>
+                    <span class="client-tag"><?= safe($c['etapa']) ?></span>
+                <?php endif; ?>
+                <?php if ($c['tareas_pendientes'] > 0): ?>
+                    <span class="client-tag" style="color:var(--warning)"><?= $c['tareas_pendientes'] ?> tareas</span>
+                <?php endif; ?>
+            </div>
+            <div class="client-bottom" onclick="event.stopPropagation()">
+                <div class="client-fee"><?= $c['fee_mensual'] > 0 ? format_money($c['fee_mensual']) . '<span style="font-size:.7rem;font-weight:400;color:var(--text-muted)">/mes</span>' : '<span style="color:var(--text-muted);font-size:.82rem">-</span>' ?></div>
+                <div class="client-actions">
+                    <?php if ($c['url_dashboard']): ?>
+                        <a href="<?= safe($c['url_dashboard']) ?>" target="_blank" class="client-dash-link" title="Abrir dashboard del cliente">Dashboard &#8599;</a>
+                    <?php endif; ?>
+                    <button class="btn btn-secondary btn-sm" onclick="window.open('ficha-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Ficha PDF">PDF</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.open('servicio-pdf.php?id=<?= $c['id'] ?>','_blank')" title="Documento de servicio">Servicio</button>
+                    <?php if (can_edit($current_user['id'], 'crm')): ?>
+                        <button class="btn btn-secondary btn-sm" onclick="editClient(<?= $c['id'] ?>)" title="Editar">Editar</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+
+<!-- Vista Pipeline (kanban) -->
+<div id="crmTabPipeline" class="crm-tab-content">
+    <div class="pipeline">
+        <?php foreach ($pipeline_stages as $stage_key => $stage_label):
+            $cards = $clientes_por_etapa[$stage_key];
+        ?>
+        <div class="pipeline-stage">
+            <div class="pipeline-stage-header">
+                <span class="pipeline-stage-name"><?= $stage_label ?></span>
+                <span class="pipeline-stage-count"><?= count($cards) ?></span>
+            </div>
+            <?php foreach ($cards as $c): ?>
+            <div class="pipeline-card" onclick="openClientDetail(<?= $c['id'] ?>)" title="<?= safe($c['nombre']) ?>">
+                <div class="pipeline-card-name"><?= safe($c['nombre']) ?></div>
+                <div class="pipeline-card-sub"><?= safe($c['rubro'] ?: 'Sin rubro') ?></div>
+                <?php if ($c['fee_mensual'] > 0): ?>
+                    <div style="font-size:.7rem;color:var(--success);margin-top:4px"><?= format_money($c['fee_mensual']) ?>/mes</div>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+            <?php if (empty($cards)): ?>
+                <div style="font-size:.72rem;color:var(--text-muted);text-align:center;padding:12px 0">Sin clientes</div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
 </div>
 
 <script>
 const crmEquipoList = <?= json_encode(array_column($equipo_list, 'nombre', 'id')) ?>;
 const planesOpts = {'':'Sin plan','growth':'Growth','scale':'Scale','starter':'Starter','meta_ads':'Meta Ads','google_ads':'Google Ads','full_ads':'Full Ads','full_ads_seo':'Full Ads + SEO','custom':'Custom'};
+
+function switchCrmTab(tab, btn) {
+    document.querySelectorAll('.crm-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.crm-tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('crmTab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+}
 
 function filterClients() {
     const q = document.getElementById('crmSearch').value.toLowerCase();
@@ -169,6 +240,40 @@ async function openClientDetail(id) {
         ${c.presupuesto_ads ? '<div><div style="font-size:.82rem;font-weight:600;margin-bottom:6px">Presupuesto Ads</div><div style="font-size:.82rem;white-space:pre-line;background:var(--bg);padding:10px 14px;border-radius:8px">' + escHtml(c.presupuesto_ads) + '</div></div>' : ''}
         ${c.url_dashboard ? '<div><div style="font-size:.82rem;font-weight:600;margin-bottom:6px">Dashboard del cliente</div><a href="' + escHtml(c.url_dashboard) + '" target="_blank" class="client-dash-link" style="font-size:.82rem">Abrir dashboard &#8599;</a></div>' : ''}
         ${c.notas ? '<div style="border-top:1px solid var(--border);padding-top:12px"><div style="font-size:.82rem;font-weight:600;margin-bottom:4px">Notas</div><div style="font-size:.82rem;color:var(--text-muted);white-space:pre-line">' + escHtml(c.notas) + '</div></div>' : ''}
+
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div style="font-size:.82rem;font-weight:600">Interacciones</div>
+                ${APP.canEdit ? '<button class="btn btn-secondary btn-sm" onclick="toggleInteractionForm(' + c.id + ')">+ Registrar</button>' : ''}
+            </div>
+            <div id="interactionForm_${c.id}" style="display:none;background:var(--bg);border-radius:8px;padding:14px;margin-bottom:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                        <label style="font-size:.75rem;color:var(--text-muted);display:block;margin-bottom:4px">Tipo</label>
+                        <select id="iType_${c.id}" class="form-select" style="font-size:.82rem;padding:6px 10px;width:100%">
+                            <option value="llamada">Llamada</option>
+                            <option value="email">Email</option>
+                            <option value="reunion">Reunión</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="nota" selected>Nota</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:.75rem;color:var(--text-muted);display:block;margin-bottom:4px">Resultado</label>
+                        <input type="text" id="iResultado_${c.id}" class="crm-search" placeholder="Resultado..." style="width:100%;padding:6px 10px;font-size:.82rem">
+                    </div>
+                </div>
+                <div style="margin-bottom:8px">
+                    <label style="font-size:.75rem;color:var(--text-muted);display:block;margin-bottom:4px">Contenido</label>
+                    <textarea id="iContenido_${c.id}" class="crm-search" rows="3" placeholder="Descripción de la interacción..." style="width:100%;padding:8px 10px;font-size:.82rem;resize:vertical"></textarea>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" onclick="toggleInteractionForm(${c.id})">Cancelar</button>
+                    <button class="btn btn-primary btn-sm" onclick="saveInteraction(${c.id})">Guardar</button>
+                </div>
+            </div>
+            <div id="interactionList_${c.id}" style="font-size:.82rem;color:var(--text-muted)">Cargando...</div>
+        </div>
     </div>`;
 
     const footer = `
@@ -178,6 +283,50 @@ async function openClientDetail(id) {
         ${APP.canEdit ? '<button class="btn btn-primary btn-sm" onclick="Modal.close();editClient('+c.id+')">Editar</button>' : ''}
         <button class="btn btn-secondary" onclick="Modal.close()">Cerrar</button>`;
     Modal.open(c.nombre, body, footer);
+
+    // Cargar interacciones de forma asíncrona
+    loadInteractions(c.id);
+}
+
+async function loadInteractions(clienteId) {
+    const res = await API.get('get_interactions', { cliente_id: clienteId });
+    const el = document.getElementById('interactionList_' + clienteId);
+    if (!el) return;
+    if (!res || !res.data || res.data.length === 0) {
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:.8rem;padding:8px 0">Sin interacciones registradas.</div>';
+        return;
+    }
+    const tipoColors = { llamada:'rgba(56,189,248,.15)', email:'rgba(167,139,250,.15)', reunion:'rgba(52,211,153,.15)', whatsapp:'rgba(74,222,128,.15)', nota:'rgba(249,115,22,.15)' };
+    el.innerHTML = res.data.map(i => `
+        <div class="interaction-item">
+            <div style="display:flex;align-items:center;gap:6px">
+                <span class="interaction-tipo" style="background:${tipoColors[i.tipo]||'rgba(255,255,255,.05)'}">${escHtml(i.tipo)}</span>
+                <span class="interaction-fecha">${escHtml((i.fecha||'').slice(0,16).replace('T',' '))}</span>
+                ${i.responsable_nombre ? '<span style="font-size:.7rem;color:var(--text-muted)">— '+escHtml(i.responsable_nombre)+'</span>' : ''}
+            </div>
+            <div class="interaction-contenido">${escHtml(i.contenido)}</div>
+            ${i.resultado ? '<div class="interaction-resultado">Resultado: '+escHtml(i.resultado)+'</div>' : ''}
+        </div>`).join('');
+}
+
+function toggleInteractionForm(clienteId) {
+    const f = document.getElementById('interactionForm_' + clienteId);
+    if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveInteraction(clienteId) {
+    const tipo = document.getElementById('iType_' + clienteId)?.value || 'nota';
+    const contenido = document.getElementById('iContenido_' + clienteId)?.value?.trim();
+    const resultado = document.getElementById('iResultado_' + clienteId)?.value?.trim();
+    if (!contenido) { toast('El contenido es obligatorio', 'error'); return; }
+    const res = await API.post('create_interaction', { cliente_id: clienteId, tipo, contenido, resultado });
+    if (res) {
+        toast('Interacción guardada');
+        toggleInteractionForm(clienteId);
+        document.getElementById('iContenido_' + clienteId).value = '';
+        document.getElementById('iResultado_' + clienteId).value = '';
+        loadInteractions(clienteId);
+    }
 }
 
 async function editClient(id) {

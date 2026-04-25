@@ -238,6 +238,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
         );
 
         -- ============================================================
+        -- SERVICIOS POR CLIENTE — servicios contratados individualmente
+        -- ============================================================
+        CREATE TABLE servicios_cliente (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'suscripcion' CHECK(tipo IN ('suscripcion','proyecto','addon','otro')),
+            monto INTEGER NOT NULL DEFAULT 0,
+            estado TEXT NOT NULL DEFAULT 'activo' CHECK(estado IN ('activo','pausado','cancelado')),
+            fecha_inicio TEXT,
+            fecha_fin TEXT,
+            notas TEXT DEFAULT '',
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            updated_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+        );
+
+        -- ============================================================
+        -- INTERACCIONES CRM — llamadas, emails, reuniones, notas
+        -- ============================================================
+        CREATE TABLE interacciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'nota' CHECK(tipo IN ('llamada','email','reunion','whatsapp','nota')),
+            contenido TEXT NOT NULL,
+            resultado TEXT DEFAULT '',
+            responsable_id INTEGER,
+            fecha TEXT DEFAULT (CURRENT_TIMESTAMP),
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+            FOREIGN KEY (responsable_id) REFERENCES equipo(id) ON DELETE SET NULL
+        );
+
+        -- ============================================================
         -- MARKETING — campañas vinculadas a clientes
         -- ============================================================
         CREATE TABLE campanas (
@@ -402,6 +436,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
         CREATE INDEX idx_actividad_fecha ON actividad(created_at);
         CREATE INDEX idx_actividad_modulo ON actividad(modulo);
         CREATE INDEX idx_permisos_usuario ON permisos(usuario_id);
+        CREATE INDEX idx_servicios_cliente ON servicios_cliente(cliente_id);
+        CREATE INDEX idx_servicios_estado ON servicios_cliente(estado);
+        CREATE INDEX idx_interacciones_cliente ON interacciones(cliente_id);
+        CREATE INDEX idx_interacciones_fecha ON interacciones(fecha);
 
 SQL;
 
