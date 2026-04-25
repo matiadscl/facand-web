@@ -11,8 +11,38 @@ $meses = [];
 foreach ($MN as $num => $label) $meses[] = "$anio-$num";
 $mes_actual = date('Y-m');
 
-// Items del presupuesto
-$items = query_all('SELECT * FROM budget_items WHERE activo = 1 ORDER BY categoria, orden, nombre') ?: [];
+// ============================================================
+// INGRESOS: calculados desde servicios_cliente vigentes por mes
+// ============================================================
+$servicios = query_all("SELECT s.id, s.cliente_id, c.nombre as cliente, s.nombre as servicio, s.tipo, s.monto, s.estado, s.fecha_inicio, s.fecha_fin, s.fecha_pausa, s.fecha_reanudacion
+    FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
+    WHERE s.estado != 'cancelado' AND s.monto > 0
+    ORDER BY c.nombre") ?: [];
+
+// Calcular ingresos por mes: servicio vigente si fecha_inicio <= ultimo_dia AND (fecha_fin IS NULL OR fecha_fin >= primer_dia)
+// Excluir meses en pausa
+$ingresos_por_mes = []; // [mes] = total
+$ingresos_detalle = []; // [mes] = [{cliente, servicio, monto}]
+foreach ($meses as $mes) {
+    $primer_dia = $mes . '-01';
+    $ultimo_dia = date('Y-m-t', strtotime($primer_dia));
+    $total = 0;
+    $detalle = [];
+    foreach ($servicios as $s) {
+        // Vigencia por fechas
+        if ($s['fecha_inicio'] && $s['fecha_inicio'] > $ultimo_dia) continue;
+        if ($s['fecha_fin'] && $s['fecha_fin'] < $primer_dia) continue;
+        // Pausa
+        if ($s['fecha_pausa'] && $s['fecha_pausa'] <= $ultimo_dia && (!$s['fecha_reanudacion'] || $s['fecha_reanudacion'] > $ultimo_dia)) continue;
+        $total += $s['monto'];
+        $detalle[] = ['cliente' => $s['cliente'], 'servicio' => $s['servicio'], 'monto' => $s['monto']];
+    }
+    $ingresos_por_mes[$mes] = $total;
+    $ingresos_detalle[$mes] = $detalle;
+}
+
+// Items del presupuesto (CdV, GAV, No Op — NO ingresos)
+$items = query_all("SELECT * FROM budget_items WHERE activo = 1 AND categoria != 'Ingresos' ORDER BY categoria, orden, nombre") ?: [];
 
 // Valores por item/mes
 $values_raw = query_all("SELECT item_id, mes, valor FROM budget_values WHERE mes LIKE ?", ["$anio-%"]) ?: [];
@@ -97,7 +127,9 @@ const CAT_SIGNO = { 'Ingresos': 1, 'Costo de Ventas': -1, 'GAV': -1, 'No Operaci
 let items = <?= json_encode($items) ?>;
 let vals = <?= json_encode($values) ?>;
 let realIng = <?= json_encode($real_ing) ?>;
-let dirty = []; // [{item_id, mes, valor}]
+const ingresosPorMes = <?= json_encode($ingresos_por_mes) ?>;
+const ingresosDetalle = <?= json_encode($ingresos_detalle) ?>;
+let dirty = [];
 
 function getVal(itemId, mes) {
     return (vals[itemId] && vals[itemId][mes]) ? vals[itemId][mes] : null;
@@ -107,14 +139,11 @@ function getItemVal(item, mesIdx) {
     const mes = MESES[mesIdx];
     const stored = getVal(item.id, mes);
     if (stored !== null) return stored;
-    // Default: fijo = valor_default, variable = valor_default (es %)
     return item.valor_default || 0;
 }
 
 function calcIngresos(mesIdx) {
-    let total = 0;
-    items.filter(i => i.categoria === 'Ingresos').forEach(i => { total += getItemVal(i, mesIdx); });
-    return total;
+    return ingresosPorMes[MESES[mesIdx]] || 0;
 }
 
 function calcCatTotal(cat, mesIdx) {
@@ -136,30 +165,57 @@ function render() {
 
     CATS.forEach(cat => {
         const catItems = items.filter(i => i.categoria === cat);
-        const showTipo = (cat !== 'Ingresos'); // Ingresos no necesita tipo fijo/variable
 
         // Section header
         html += `<tr class="row-section"><td class="col-cat" colspan="2">${cat}</td>`;
         MESES.forEach(() => html += '<td></td>');
         html += '<td></td></tr>';
 
-        // Items
+        // === INGRESOS: desde servicios vigentes ===
+        if (cat === 'Ingresos') {
+            // Fila total ingresos por mes
+            let ingTotal = 0;
+            html += `<tr style="cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+                <td class="col-cat" style="padding-left:12px;font-weight:600;">Servicios activos</td>
+                <td style="text-align:center;"><span class="tipo-badge tipo-fijo" style="font-size:.5rem;">Auto</span></td>`;
+            MESES.forEach((mes, mi) => {
+                const v = calcIngresos(mi);
+                ingTotal += v;
+                const det = ingresosDetalle[mes] || [];
+                const esActual = (mes === MES_ACTUAL);
+                html += `<td style="text-align:right;font-weight:600;color:var(--success);${esActual?'background:rgba(249,115,22,.04);':''}" title="${det.map(d=>d.cliente+': $'+Math.round(d.monto).toLocaleString()).join('\n')}">${fmtMoney(v)}</td>`;
+            });
+            html += `<td style="text-align:right;font-weight:700;color:var(--success);">${fmtMoney(ingTotal)}</td></tr>`;
+
+            // Fila expandible con detalle por cliente (oculta por defecto)
+            html += `<tr style="display:none;"><td colspan="${MESES.length + 3}" style="padding:0;">
+                <div style="padding:8px 12px;background:var(--bg);border-radius:6px;margin:4px;">
+                    <div style="font-size:.65rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Desglose por cliente (mes actual)</div>
+                    <table style="width:100%;font-size:.65rem;">`;
+            const detActual = ingresosDetalle[MES_ACTUAL] || ingresosDetalle[MESES[0]] || [];
+            detActual.forEach(d => {
+                html += `<tr><td style="padding:2px 4px;">${escHtml(d.cliente)}</td><td style="padding:2px 4px;color:var(--text-muted);">${escHtml(d.servicio)}</td><td style="padding:2px 4px;text-align:right;color:var(--success);">${fmtMoney(d.monto)}</td></tr>`;
+            });
+            html += `</table></div></td></tr>`;
+
+            // Saltar al siguiente cat (no mostrar add item para ingresos)
+            // Agregar línea calculada si es CdV después
+            return;
+        }
+
+        // === CdV, GAV, No Op: items editables ===
         catItems.forEach(item => {
             html += `<tr>`;
             html += `<td class="col-cat" style="padding-left:12px;">
                 ${escHtml(item.nombre)}
                 <button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.6rem;padding:0 3px;" onclick="deleteItem(${item.id})" title="Eliminar">✕</button>
             </td>`;
-            html += `<td style="text-align:center;">`;
-            if (showTipo) {
-                html += `<select class="tipo-badge ${item.tipo_costo === 'variable' ? 'tipo-variable' : 'tipo-fijo'}" style="border:none;cursor:pointer;font-size:.55rem;padding:1px 2px;" onchange="changeTipo(${item.id}, this.value)">
+            html += `<td style="text-align:center;">
+                <select class="tipo-badge ${item.tipo_costo === 'variable' ? 'tipo-variable' : 'tipo-fijo'}" style="border:none;cursor:pointer;font-size:.55rem;padding:1px 2px;" onchange="changeTipo(${item.id}, this.value)">
                     <option value="fijo" ${item.tipo_costo === 'fijo' ? 'selected' : ''}>Fijo</option>
                     <option value="variable" ${item.tipo_costo === 'variable' ? 'selected' : ''}>%Ing</option>
-                </select>`;
-            } else {
-                html += `<span class="tipo-badge tipo-fijo">$</span>`;
-            }
-            html += `</td>`;
+                </select>
+            </td>`;
 
             let rowTotal = 0;
             MESES.forEach((mes, mi) => {
@@ -234,9 +290,8 @@ async function changeTipo(itemId, tipo) {
 }
 
 function addItem(cat) {
-    const tipos = cat === 'Ingresos'
-        ? ''
-        : `<div style="margin-top:8px;">
+    if (cat === 'Ingresos') return; // Ingresos vienen de servicios
+    const tipos = `<div style="margin-top:8px;">
             <label class="form-label">Tipo de costo</label>
             <select name="tipo_costo" class="form-select">
                 <option value="fijo">Fijo (monto mensual)</option>
