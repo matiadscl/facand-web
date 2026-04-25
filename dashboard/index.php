@@ -47,7 +47,7 @@ $module_info = $all_modules[$page];
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header" style="display:flex;align-items:center;justify-content:center;">
+        <div class="sidebar-header" style="display:flex;align-items:center;justify-content:center;background:#000;padding:16px;">
             <img src="assets/img/logo.webp" alt="Facand" style="height:36px;width:auto;">
         </div>
         <nav class="sidebar-nav">
