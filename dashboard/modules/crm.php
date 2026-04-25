@@ -75,9 +75,11 @@ $pipeline_stages = ['lead'=>'Lead','contactado'=>'Contactado','propuesta'=>'Prop
 $clientes_por_etapa = [];
 foreach ($pipeline_stages as $key => $_) $clientes_por_etapa[$key] = [];
 foreach ($clientes as $c) {
-    $etapa = $c['etapa_pipeline'] ?: 'lead';
-    if (!isset($clientes_por_etapa[$etapa])) $etapa = 'lead';
-    $clientes_por_etapa[$etapa][] = $c;
+    $etapa = $c['etapa_pipeline'] ?: '';
+    if (isset($clientes_por_etapa[$etapa])) {
+        $clientes_por_etapa[$etapa][] = $c;
+    }
+    // Si la etapa no está en el pipeline (ej: cerrado_ganado), no se muestra
 }
 ?>
 
