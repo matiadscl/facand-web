@@ -394,11 +394,18 @@ async function submitUpload() {
     setTimeout(() => ctrl.abort(), 15000);
     try {
         const res = await fetch('api/data.php', { method:'POST', body:fd, signal:ctrl.signal });
-        const json = await res.json();
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch(pe) {
+            console.error('API response:', text);
+            toast('Error del servidor — revisa consola', 'error');
+            return;
+        }
         if (json.ok) { toast('Factura creada'); Modal.close(); refreshPage(); }
         else toast(json.error || 'Error al crear factura', 'error');
     } catch(e) {
-        toast(e.name === 'AbortError' ? 'Timeout — intenta de nuevo' : 'Error de conexión', 'error');
+        console.error('Fetch error:', e);
+        toast(e.name === 'AbortError' ? 'Timeout — intenta de nuevo' : 'Error de conexión: ' + e.message, 'error');
     } finally { btn.disabled = false; btn.textContent = 'Crear Factura'; }
 }
 
