@@ -174,6 +174,7 @@ async function extractPdfData(input) {
             if (extractedData.razon_social) html += `<div><span style="color:var(--text-muted)">Razon Social:</span> ${escHtml(extractedData.razon_social)}</div>`;
             if (extractedData.rut) html += `<div><span style="color:var(--text-muted)">RUT:</span> ${escHtml(extractedData.rut)}</div>`;
             if (extractedData.fecha) html += `<div><span style="color:var(--text-muted)">Fecha:</span> ${escHtml(extractedData.fecha)}</div>`;
+            if (extractedData.concepto) html += `<div style="grid-column:1/-1"><span style="color:var(--text-muted)">Concepto:</span> ${escHtml(extractedData.concepto)}</div>`;
             if (extractedData.cliente_sugerido) html += `<div><span style="color:var(--success)">Cliente detectado automaticamente</span></div>`;
             html += '</div></div>';
             resultDiv.innerHTML = html;
@@ -184,7 +185,8 @@ async function extractPdfData(input) {
             document.getElementById('btnStep1').disabled = false;
         }
     } catch(e) {
-        resultDiv.innerHTML = '<div style="color:var(--warning);font-size:.82rem;">Error al analizar. Puedes completar los campos manualmente.</div>';
+        console.error('Extract error:', e);
+        resultDiv.innerHTML = '<div style="color:var(--text-muted);font-size:.82rem;">No se pudo leer el PDF automaticamente. Completa los campos en el siguiente paso.</div>';
         extractedData = {};
         document.getElementById('btnStep1').disabled = false;
     }
@@ -204,6 +206,7 @@ function openUploadStep2(files) {
     const fechaVal = extractedData.fecha || new Date().toISOString().split('T')[0];
     const razonSocial = extractedData.razon_social || '';
     const rutFact = extractedData.rut || '';
+    const conceptoVal = extractedData.concepto || '';
 
     const body = `
     <form id="frmUpload" enctype="multipart/form-data" style="display:grid;gap:14px;">
@@ -226,7 +229,7 @@ function openUploadStep2(files) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
                 <label class="form-label">Concepto *</label>
-                <input type="text" name="concepto" class="form-input" placeholder="Ej: Fee mensual abril 2026" required>
+                <input type="text" name="concepto" class="form-input" placeholder="Ej: Fee mensual abril 2026" value="${escHtml(conceptoVal)}" required>
             </div>
             <div class="form-group">
                 <label class="form-label">Monto (exento IVA) *</label>

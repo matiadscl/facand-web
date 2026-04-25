@@ -17,6 +17,9 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/permissions.php';
 require_once __DIR__ . '/../includes/functions.php';
 
+// Suprimir warnings para garantizar JSON limpio
+error_reporting(E_ERROR);
+
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 $user_id = (int)$_SESSION['user_id'];
 
@@ -472,42 +475,114 @@ switch ($action) {
     // ---- EXTRAER DATOS DE PDF ----
     case 'extract_pdf_data':
         if (!can_edit($user_id, 'billing')) fail('Sin permiso');
-        if (empty($_FILES['pdf'])) fail('No se recibió archivo');
+        if (empty($_FILES['pdf']) || $_FILES['pdf']['error'] !== UPLOAD_ERR_OK) {
+            // Si no hay archivo o hay error, responder con datos vacíos (no fallar)
+            respond(['monto' => 0, 'razon_social' => '', 'rut' => '', 'numero_factura' => '', 'fecha' => '', 'cliente_sugerido' => null, 'texto_preview' => '']);
+            break;
+        }
 
         $tmp = $_FILES['pdf']['tmp_name'];
-        $text = shell_exec('pdftotext -layout ' . escapeshellarg($tmp) . ' - 2>/dev/null') ?? '';
+        $text = '';
 
-        // Extraer monto total
-        $monto = 0;
-        // Buscar patrones: "TOTAL $123.456", "Total: $123,456", "MONTO TOTAL 123.456"
-        if (preg_match('/(?:TOTAL|MONTO\s*TOTAL|TOTAL\s*NETO|MONTO\s*NETO)\s*\$?\s*([\d.,]+)/i', $text, $m)) {
-            $monto = (int)str_replace(['.', ','], ['', ''], $m[1]);
-        } elseif (preg_match('/\$\s*([\d.]+)\s*$/m', $text, $m)) {
-            $monto = (int)str_replace('.', '', $m[1]);
+        // Intentar pdftotext primero (más confiable)
+        $pdftotext_path = trim(shell_exec('which pdftotext 2>/dev/null') ?? '');
+        if ($pdftotext_path) {
+            $text = shell_exec($pdftotext_path . ' -layout ' . escapeshellarg($tmp) . ' - 2>/dev/null') ?? '';
         }
 
-        // Extraer razón social / RUT
+        // Fallback: extraer texto de streams comprimidos con PHP puro
+        if (strlen(trim($text)) < 10) {
+            $raw = file_get_contents($tmp);
+            $text = '';
+            $offset = 0;
+            while (preg_match('/FlateDecode.*?stream\r?\n/s', $raw, $sm, PREG_OFFSET_CAPTURE, $offset)) {
+                $start = $sm[0][1] + strlen($sm[0][0]);
+                $end = strpos($raw, 'endstream', $start);
+                if ($end === false) break;
+                $chunk = substr($raw, $start, $end - $start);
+                $decoded = @gzuncompress($chunk);
+                if ($decoded === false) {
+                    for ($skip = 0; $skip < 3; $skip++) {
+                        $decoded = @gzinflate(substr($chunk, $skip));
+                        if ($decoded !== false) break;
+                    }
+                }
+                if ($decoded !== false && strlen($decoded) > 20) {
+                    // Primero decodificar octales en todo el stream
+                    $decoded = preg_replace_callback('/\\\\(\d{3})/', fn($m) => chr(octdec($m[1])), $decoded);
+                    // Decodificar paréntesis escapados
+                    $decoded = str_replace(['\\(', '\\)'], ['(', ')'], $decoded);
+                    // Extraer texto entre paréntesis (ya decodificadas)
+                    if (preg_match_all('/\(([^)]+)\)/', $decoded, $ptexts)) {
+                        $line = implode(' ', $ptexts[1]);
+                        if (preg_match('/[a-zA-Z0-9\$]{2,}/', $line)) {
+                            $text .= $line . "\n";
+                        }
+                    }
+                }
+                $offset = $end;
+            }
+        }
+
+        // Si aún no hay texto, responder vacío (no fallar)
+        if (strlen(trim($text)) < 5) {
+            respond(['monto' => 0, 'razon_social' => '', 'rut' => '', 'numero_factura' => '', 'fecha' => '', 'concepto' => '', 'cliente_sugerido' => null, 'texto_preview' => 'No se pudo extraer texto del PDF']);
+            break;
+        }
+
+        // ---- PARSER DE FACTURA CHILENA (SII) ----
+
+        // Extraer TOTAL
+        $monto = 0;
+        if (preg_match('/TOTAL\s*\$\s*([\d.,]+)/i', $text, $m)) {
+            $monto = (int)str_replace(['.', ','], ['', ''], $m[1]);
+        } elseif (preg_match('/EXENTO\s*\$\s*([\d.,]+)/i', $text, $m)) {
+            $monto = (int)str_replace(['.', ','], ['', ''], $m[1]);
+        }
+
+        // Extraer razón social del cliente (SEÑOR(ES): xxx)
         $razon_social = '';
-        $rut = '';
-        if (preg_match('/(?:RAZON\s*SOCIAL|RAZON\s*SOC\.|SEÑOR(?:ES)?|CLIENTE)\s*:?\s*(.+)/i', $text, $m)) {
+        if (preg_match('/SE.OR(?:\(ES\))?\s*:?\s*(.+)/iu', $text, $m)) {
             $razon_social = trim($m[1]);
         }
-        if (preg_match('/(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])/i', $text, $m)) {
-            $rut = $m[1];
+
+        // Extraer RUT del cliente
+        // El RUT puede estar en la misma línea o en la siguiente
+        $rut = '';
+        if (preg_match_all('/R\.U\.T\.?\s*:?\s*([\d]{1,2}[\.\d]*-\s*[\dkK])/i', $text, $ruts)) {
+            $rut = isset($ruts[1][1]) ? trim(str_replace(' ', '', $ruts[1][1])) : '';
+        }
+        // Si el segundo R.U.T.: está vacío en la misma línea, buscar en la siguiente
+        if (!$rut || strlen($rut) < 5) {
+            if (preg_match_all('/R\.U\.T\.?\s*:\s*\n?\s*([\d.,\-\s]+)/i', $text, $ruts2)) {
+                foreach ($ruts2[1] as $i => $r) {
+                    $r = trim(str_replace(' ', '', $r));
+                    if ($i > 0 && preg_match('/\d{1,2}[\.\d]+-[\dkK]/i', $r)) {
+                        $rut = $r;
+                        break;
+                    }
+                }
+            }
         }
 
-        // Extraer número de factura
+        // Extraer N° factura (Nº1, Nº 123, N° 456)
         $numero_factura = '';
-        if (preg_match('/(?:FACTURA|N°|Nro|BOLETA)\s*(?:EXENTA|ELECTRONICA|DE VENTA)?\s*(?:N°|Nro\.?)?\s*(\d+)/i', $text, $m)) {
+        if (preg_match('/N[°ºo]\s*(\d+)/iu', $text, $m)) {
             $numero_factura = $m[1];
         }
 
-        // Extraer fecha
+        // Extraer fecha emisión
         $fecha = '';
-        if (preg_match('/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/', $text, $m)) {
+        $meses_map = ['enero'=>'01','febrero'=>'02','marzo'=>'03','abril'=>'04','mayo'=>'05','junio'=>'06','julio'=>'07','agosto'=>'08','septiembre'=>'09','octubre'=>'10','noviembre'=>'11','diciembre'=>'12'];
+        if (preg_match('/Fecha\s*Emisi[oó]n\s*:?\s*(\d{1,2})\s*de\s*(\w+)\s*(?:del?\s*)?(\d{4})/iu', $text, $m)) {
+            $mes = $meses_map[strtolower($m[2])] ?? '01';
+            $fecha = $m[3] . '-' . $mes . '-' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
+        } elseif (preg_match('/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/', $text, $m)) {
             $year = strlen($m[3]) === 2 ? '20' . $m[3] : $m[3];
             $fecha = "$year-" . str_pad($m[2], 2, '0', STR_PAD_LEFT) . '-' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
         }
+
+        $concepto = '';
 
         // Buscar match de razón social con clientes conocidos
         $cliente_sugerido = null;
@@ -527,6 +602,7 @@ switch ($action) {
             'rut' => $rut,
             'numero_factura' => $numero_factura,
             'fecha' => $fecha,
+            'concepto' => $concepto,
             'cliente_sugerido' => $cliente_sugerido,
             'texto_preview' => mb_substr($text, 0, 500),
         ]);
