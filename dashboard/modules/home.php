@@ -4,7 +4,14 @@
  */
 
 $total_clientes    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo"') ?? 0;
-$fee_mensual_total = query_scalar('SELECT COALESCE(SUM(fee_mensual),0) FROM clientes WHERE tipo = "activo" AND estado_pago != "canje"') ?? 0;
+// Facturación proyectada = suscripciones activas + implementaciones activas (pendientes de facturar)
+$total_suscripciones   = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo = "suscripcion" AND estado = "activo"') ?? 0;
+$total_implementaciones = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo IN ("implementacion","adicional") AND estado = "activo"') ?? 0;
+// Fallback: si no hay servicios registrados, usar fee_mensual de clientes
+if ($total_suscripciones == 0) {
+    $total_suscripciones = query_scalar('SELECT COALESCE(SUM(fee_mensual),0) FROM clientes WHERE tipo = "activo" AND estado_pago != "canje"') ?? 0;
+}
+$fee_mensual_total = $total_suscripciones + $total_implementaciones;
 $pagos_vencidos    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo" AND estado_pago = "vencido"') ?? 0;
 $tareas_pendientes = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso")') ?? 0;
 $tareas_atrasadas  = query_scalar('SELECT COUNT(*) FROM tareas WHERE estado IN ("pendiente","en_progreso") AND fecha_limite < date("now") AND fecha_limite IS NOT NULL') ?? 0;
@@ -54,7 +61,12 @@ $meses_es = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'
     <a href="?page=billing" class="home-kpi" style="border-left:3px solid var(--primary)">
         <div class="home-kpi-label">Facturación Proyectada</div>
         <div class="home-kpi-value" style="color:var(--primary)"><?= format_money($fee_mensual_total) ?></div>
-        <div class="home-kpi-sub"><?= $total_clientes ?> clientes activos</div>
+        <div class="home-kpi-sub"><?php
+            $parts = [];
+            if ($total_suscripciones > 0) $parts[] = format_money($total_suscripciones) . ' suscr.';
+            if ($total_implementaciones > 0) $parts[] = format_money($total_implementaciones) . ' impl.';
+            echo implode(' + ', $parts) ?: $total_clientes . ' clientes activos';
+        ?></div>
     </a>
     <a href="?page=receivables" class="home-kpi" style="border-left:3px solid var(--success)">
         <div class="home-kpi-label">Cobrado Este Mes</div>

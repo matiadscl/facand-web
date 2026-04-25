@@ -43,7 +43,10 @@ if (!empty($presupuesto)) {
 
 // Monto pendiente de pago (desde cuentas por cobrar)
 $monto_pendiente = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE cliente_id = ? AND estado IN ("pendiente","parcial","vencido")', [$id]) ?? 0;
-$monto_pagado_total = query_scalar('SELECT COALESCE(SUM(monto_pagado),0) FROM cuentas_cobrar WHERE cliente_id = ?', [$id]) ?? 0;
+
+// Totales por tipo de servicio
+$total_implementacion = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = ? AND tipo = "implementacion" AND estado IN ("activo","pausado")', [$id]) ?? 0;
+$total_suscripcion = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = ? AND tipo = "suscripcion" AND estado = "activo"', [$id]) ?? 0;
 
 // Logo en base64 si existe (para impresión offline)
 $logoPath = __DIR__ . '/assets/img/logo.png';
