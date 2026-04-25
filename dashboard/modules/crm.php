@@ -3,11 +3,15 @@
  * Módulo CRM — Clientes Facand
  */
 $clientes = query_all('SELECT c.*, e.nombre as responsable_nombre,
-    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes
+    (SELECT COUNT(*) FROM tareas WHERE cliente_id = c.id AND estado IN ("pendiente","en_progreso")) as tareas_pendientes,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = c.id AND tipo = "suscripcion" AND estado = "activo") as total_suscripcion,
+    (SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE cliente_id = c.id AND tipo IN ("implementacion","adicional") AND estado = "activo") as total_implementacion,
+    (SELECT COUNT(*) FROM servicios_cliente WHERE cliente_id = c.id AND estado = "activo") as servicios_activos
     FROM clientes c LEFT JOIN equipo e ON c.responsable_id = e.id ORDER BY c.nombre');
 $equipo_list = query_all('SELECT id, nombre FROM equipo WHERE activo = 1 ORDER BY nombre');
 $activos = count(array_filter($clientes, fn($c) => $c['tipo'] === 'activo'));
-$fee_total = array_sum(array_map(fn($c) => $c['tipo'] === 'activo' && $c['estado_pago'] !== 'canje' ? $c['fee_mensual'] : 0, $clientes));
+// Suscripción total desde servicios_cliente (no fee_mensual)
+$fee_total = array_sum(array_map(fn($c) => $c['tipo'] === 'activo' ? $c['total_suscripcion'] + $c['total_implementacion'] : 0, $clientes));
 $vencidos = count(array_filter($clientes, fn($c) => $c['estado_pago'] === 'vencido'));
 $planes_labels = ['growth'=>'Growth','scale'=>'Scale','starter'=>'Starter','meta_ads'=>'Meta Ads','google_ads'=>'Google Ads','full_ads'=>'Full Ads','full_ads_seo'=>'Full Ads + SEO'];
 ?>
@@ -79,7 +83,7 @@ foreach ($clientes as $c) {
 
 <div class="crm-kpis">
     <div class="crm-kpi" style="border-left:3px solid var(--accent)"><div class="crm-kpi-label">Clientes Activos</div><div class="crm-kpi-val"><?= $activos ?></div></div>
-    <div class="crm-kpi" style="border-left:3px solid var(--success)"><div class="crm-kpi-label">Suscripción</div><div class="crm-kpi-val" style="color:var(--success)"><?= format_money($fee_total) ?></div></div>
+    <div class="crm-kpi" style="border-left:3px solid var(--success)"><div class="crm-kpi-label">Facturación Proyectada</div><div class="crm-kpi-val" style="color:var(--success)"><?= format_money($fee_total) ?></div></div>
     <div class="crm-kpi" style="border-left:3px solid <?= $vencidos ? 'var(--danger)' : 'var(--success)' ?>"><div class="crm-kpi-label">Pagos Vencidos</div><div class="crm-kpi-val <?= $vencidos ? 'danger' : '' ?>"><?= $vencidos ?></div></div>
     <div class="crm-kpi" style="border-left:3px solid var(--text-muted)"><div class="crm-kpi-label">Total Clientes</div><div class="crm-kpi-val"><?= count($clientes) ?></div></div>
 </div>
@@ -110,8 +114,8 @@ foreach ($clientes as $c) {
                 <tr>
                     <th>Nombre</th>
                     <th>Rubro</th>
-                    <th>Plan</th>
-                    <th>Suscripción</th>
+                    <th>Servicios</th>
+                    <th>Monto mensual</th>
                     <th>Estado Pago</th>
                     <th>Responsable</th>
                     <th>Acciones</th>
@@ -128,15 +132,24 @@ foreach ($clientes as $c) {
                 </td>
                 <td style="color:var(--text-muted)"><?= safe($c['rubro'] ?: '—') ?></td>
                 <td>
-                    <?php if ($c['plan']): ?>
-                        <span class="badge-plan"><?= safe($planes_labels[$c['plan']] ?? $c['plan']) ?></span>
-                    <?php else: ?>
-                        <span style="color:var(--text-muted);font-size:.78rem">Custom</span>
+                    <?php
+                    $svcs = query_all('SELECT nombre, tipo, monto FROM servicios_cliente WHERE cliente_id = ? AND estado = "activo" ORDER BY tipo DESC, monto DESC', [$c['id']]);
+                    if (!empty($svcs)):
+                        foreach ($svcs as $sv): ?>
+                            <div style="font-size:.75rem;margin-bottom:2px;">
+                                <span class="badge-plan" style="<?= $sv['tipo'] !== 'suscripcion' ? 'background:rgba(234,179,8,.1);border-color:rgba(234,179,8,.2);color:#facc15;' : '' ?>"><?= $sv['tipo'] === 'suscripcion' ? 'Suscripción' : 'Custom' ?></span>
+                                <?= format_money($sv['monto']) ?><?= $sv['tipo'] === 'suscripcion' ? '<span style="color:var(--text-muted)">/mes</span>' : '' ?>
+                            </div>
+                    <?php endforeach;
+                    else: ?>
+                        <span style="color:var(--text-muted);font-size:.78rem">Sin servicios</span>
                     <?php endif; ?>
                 </td>
                 <td class="td-fee">
-                    <?php if ($c['fee_mensual'] > 0): ?>
-                        <?= format_money($c['fee_mensual']) ?><span style="font-size:.7rem;font-weight:400;color:var(--text-muted)">/mes</span>
+                    <?php
+                    $total_cliente = ($c['total_suscripcion'] ?? 0) + ($c['total_implementacion'] ?? 0);
+                    if ($total_cliente > 0): ?>
+                        <strong><?= format_money($total_cliente) ?></strong>
                     <?php else: ?>
                         <span style="color:var(--text-muted);font-weight:400">—</span>
                     <?php endif; ?>
