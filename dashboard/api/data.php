@@ -252,6 +252,16 @@ switch ($action) {
         respond(['id' => last_id()]);
         break;
 
+    case 'save_budget':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $mes = input('mes');
+        $cat = input('categoria');
+        $monto_plan = input_int('monto_plan');
+        if (!$mes || !$cat) fail('Mes y categoría obligatorios');
+        db_execute('INSERT OR REPLACE INTO presupuesto (mes, categoria, monto_plan) VALUES (?, ?, ?)', [$mes, $cat, $monto_plan]);
+        respond();
+        break;
+
     // ---- MARKETING ----
     case 'get_campaign':
         $ca = query_one('SELECT * FROM campanas WHERE id = ?', [input_int('id')]);
