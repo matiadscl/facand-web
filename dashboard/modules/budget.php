@@ -132,7 +132,8 @@ const ingresosDetalle = <?= json_encode($ingresos_detalle) ?>;
 let dirty = [];
 
 function getVal(itemId, mes) {
-    return (vals[itemId] && vals[itemId][mes]) ? vals[itemId][mes] : null;
+    if (vals[itemId] && vals[itemId][mes] !== undefined) return vals[itemId][mes];
+    return null;
 }
 
 function getItemVal(item, mesIdx) {
