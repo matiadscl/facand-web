@@ -54,10 +54,10 @@ $presupuestos = query_all("SELECT p.*, c.nombre as cliente_nombre
 $clientes_list = query_all('SELECT id, nombre FROM clientes WHERE tipo IN ("activo","prospecto") ORDER BY nombre');
 
 // KPIs servicios
-$total_activos          = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
-$ingreso_suscripciones  = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "activo" AND tipo = "suscripcion"') ?? 0;
-$total_implementaciones = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE tipo = "implementacion"') ?? 0;
-$total_servicios        = query_scalar('SELECT COUNT(*) FROM servicios_cliente') ?? 0;
+$total_activos     = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
+$ingreso_total     = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "activo"') ?? 0;
+$total_pausados    = query_scalar('SELECT COUNT(*) FROM servicios_cliente WHERE estado = "pausado"') ?? 0;
+$ingreso_pausado   = query_scalar('SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado = "pausado"') ?? 0;
 
 // KPIs presupuestos
 $pres_enviados  = query_scalar('SELECT COUNT(*) FROM presupuestos WHERE estado = "enviado"') ?? 0;
@@ -66,13 +66,33 @@ $pres_monto     = query_scalar('SELECT COALESCE(SUM(monto_total),0) FROM presupu
 
 // Reporte por tipo
 $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(monto),0) as total_monto FROM servicios_cliente GROUP BY tipo, estado ORDER BY tipo, estado');
+
+// Facturación proyectada por mes (próximos 3 meses)
+$meses_proyeccion = [];
+for ($i = 0; $i < 3; $i++) {
+    $mes = date('Y-m', strtotime("+$i months"));
+    $mes_label = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][(int)date('m', strtotime("+$i months")) - 1] . ' ' . date('Y', strtotime("+$i months"));
+    // Activos ahora + los que inician ese mes o antes
+    $monto = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado IN ('activo','pausado') AND (fecha_inicio IS NULL OR fecha_inicio <= '$mes-28')", []) ?? 0;
+    $meses_proyeccion[] = ['mes' => $mes, 'label' => $mes_label, 'monto' => $monto];
+}
 ?>
 
 <div class="kpi-grid">
     <div class="kpi-card" style="border-left:3px solid var(--primary)"><div class="kpi-label">Servicios Activos</div><div class="kpi-value"><?= $total_activos ?></div></div>
-    <div class="kpi-card" style="border-left:3px solid var(--success)"><div class="kpi-label">Ingreso Suscripciones</div><div class="kpi-value success"><?= format_money($ingreso_suscripciones) ?></div><div class="kpi-sub">/mes</div></div>
-    <div class="kpi-card" style="border-left:3px solid var(--accent)"><div class="kpi-label">Presupuestos Enviados</div><div class="kpi-value"><?= $pres_enviados ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--success)"><div class="kpi-label">Ingreso Total Activo</div><div class="kpi-value success"><?= format_money($ingreso_total) ?></div></div>
+    <div class="kpi-card" style="border-left:3px solid var(--warning)"><div class="kpi-label">Próximos (pausados)</div><div class="kpi-value"><?= $total_pausados ?></div><div class="kpi-sub"><?= format_money($ingreso_pausado) ?> al activarse</div></div>
     <div class="kpi-card" style="border-left:3px solid var(--text-muted)"><div class="kpi-label">Presup. Aceptados</div><div class="kpi-value success"><?= $pres_aceptados ?></div><div class="kpi-sub"><?= format_money($pres_monto) ?></div></div>
+</div>
+
+<!-- Proyección por mes -->
+<div style="display:flex;gap:14px;margin-bottom:20px;">
+    <?php foreach ($meses_proyeccion as $mp): ?>
+    <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;text-align:center;">
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;"><?= $mp['label'] ?></div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--success);margin-top:4px;"><?= format_money($mp['monto']) ?></div>
+    </div>
+    <?php endforeach; ?>
 </div>
 
 <!-- Tabs -->
