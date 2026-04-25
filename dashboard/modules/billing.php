@@ -27,20 +27,22 @@ for ($i = -6; $i <= 2; $i++) {
 }
 
 // Servicios activos del mes seleccionado
-// Suscripciones: activas y con fecha_inicio <= último día del mes
-// Implementaciones: activas y con fecha_inicio dentro del mes
+// Servicios vigentes en el mes seleccionado
+// Un servicio estaba vigente si: fecha_inicio <= último día del mes Y (fecha_fin IS NULL O fecha_fin >= primer día del mes)
 $ultimo_dia = date('Y-m-t', strtotime("$mes_sel-01"));
 $primer_dia = "$mes_sel-01";
 
 $suscripciones = query_all("SELECT s.*, c.nombre as cliente_nombre
     FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
-    WHERE s.tipo = 'suscripcion' AND s.estado IN ('activo')
+    WHERE s.tipo = 'suscripcion'
     AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= '$ultimo_dia')
+    AND (s.fecha_fin IS NULL OR s.fecha_fin >= '$primer_dia')
+    AND s.monto > 0
     ORDER BY c.nombre", []);
 
 $implementaciones = query_all("SELECT s.*, c.nombre as cliente_nombre
     FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
-    WHERE s.tipo IN ('implementacion','adicional') AND s.estado = 'activo'
+    WHERE s.tipo IN ('implementacion','adicional')
     AND s.fecha_inicio >= '$primer_dia' AND s.fecha_inicio <= '$ultimo_dia'
     ORDER BY c.nombre", []);
 
