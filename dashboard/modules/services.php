@@ -107,7 +107,6 @@ $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(m
     </select>
 </div>
 
-<div class="grid-2">
     <!-- Tabla de servicios -->
     <div class="table-container">
         <div class="table-header">
@@ -143,32 +142,22 @@ $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(m
         </table>
     </div>
 
-    <!-- Reporte por tipo -->
-    <div>
-        <div class="section-header">
-            <h3 class="section-title">Resumen por Tipo</h3>
-        </div>
-        <?php
-        $tipos_resumen = [];
-        foreach ($por_tipo as $pt) {
-            $tipos_resumen[$pt['tipo']][] = $pt;
-        }
-        ?>
-        <?php foreach ($tipos_resumen as $tipo => $estados): ?>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;">
-            <div style="font-weight:600;margin-bottom:8px;text-transform:capitalize;"><?= $tipo === 'suscripcion' ? 'Suscripciones' : ($tipo === 'implementacion' ? 'Implementaciones' : 'Adicionales') ?></div>
-            <?php foreach ($estados as $e): ?>
-            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.85rem;">
-                <span><span class="badge <?= $e['estado'] === 'activo' ? 'status-success' : ($e['estado'] === 'pausado' ? 'status-warning' : 'status-muted') ?>"><?= ucfirst($e['estado']) ?></span> <?= $e['cantidad'] ?> servicio<?= $e['cantidad'] > 1 ? 's' : '' ?></span>
-                <span style="font-weight:600"><?= format_money($e['total_monto']) ?></span>
-            </div>
-            <?php endforeach; ?>
+<!-- Resumen por tipo (debajo de la tabla) -->
+<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;">
+    <?php
+    $tipos_resumen = [];
+    foreach ($por_tipo as $pt) { $tipos_resumen[$pt['tipo']][] = $pt; }
+    foreach ($tipos_resumen as $tipo => $estados): ?>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;flex:1;min-width:200px;">
+        <div style="font-weight:600;margin-bottom:6px;"><?= $tipo === 'suscripcion' ? 'Suscripciones' : ($tipo === 'implementacion' ? 'Implementaciones' : 'Adicionales') ?></div>
+        <?php foreach ($estados as $e): ?>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:.82rem;">
+            <span><span class="badge <?= $e['estado'] === 'activo' ? 'status-success' : ($e['estado'] === 'pausado' ? 'status-warning' : 'status-muted') ?>"><?= ucfirst($e['estado']) ?></span> <?= $e['cantidad'] ?></span>
+            <span style="font-weight:600"><?= format_money($e['total_monto']) ?></span>
         </div>
         <?php endforeach; ?>
-        <?php if (empty($tipos_resumen)): ?>
-            <div style="color:var(--text-muted);font-size:.85rem;padding:20px 0;">Sin datos. Agrega servicios para ver el resumen.</div>
-        <?php endif; ?>
     </div>
+    <?php endforeach; ?>
 </div>
 
 <?php else: ?>

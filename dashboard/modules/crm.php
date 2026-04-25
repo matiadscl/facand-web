@@ -115,8 +115,8 @@ foreach ($clientes as $c) {
                     <th>Nombre</th>
                     <th>Rubro</th>
                     <th>Servicios</th>
-                    <th>Monto mensual</th>
-                    <th>Estado Pago</th>
+                    <th>Pipeline</th>
+                    <th>Pago</th>
                     <th>Responsable</th>
                     <th>Acciones</th>
                 </tr>
@@ -133,27 +133,21 @@ foreach ($clientes as $c) {
                 <td style="color:var(--text-muted)"><?= safe($c['rubro'] ?: '—') ?></td>
                 <td>
                     <?php
-                    $svcs = query_all('SELECT nombre, tipo, monto FROM servicios_cliente WHERE cliente_id = ? AND estado = "activo" ORDER BY tipo DESC, monto DESC', [$c['id']]);
+                    $svcs = query_all('SELECT tipo FROM servicios_cliente WHERE cliente_id = ? AND estado = "activo" ORDER BY tipo DESC', [$c['id']]);
                     if (!empty($svcs)):
-                        foreach ($svcs as $sv): ?>
-                            <div style="font-size:.75rem;margin-bottom:2px;">
-                                <span class="badge-plan" style="<?= $sv['tipo'] !== 'suscripcion' ? 'background:rgba(234,179,8,.1);border-color:rgba(234,179,8,.2);color:#facc15;' : '' ?>"><?= $sv['tipo'] === 'suscripcion' ? 'Suscripción' : 'Custom' ?></span>
-                                <?= format_money($sv['monto']) ?><?= $sv['tipo'] === 'suscripcion' ? '<span style="color:var(--text-muted)">/mes</span>' : '' ?>
-                            </div>
+                        $tipos_unicos = array_unique(array_column($svcs, 'tipo'));
+                        foreach ($tipos_unicos as $t): ?>
+                            <span class="badge-plan" style="font-size:.65rem;<?= $t !== 'suscripcion' ? 'background:rgba(234,179,8,.1);border-color:rgba(234,179,8,.2);color:#facc15;' : '' ?>"><?= $t === 'suscripcion' ? 'Suscripción' : 'Custom' ?></span>
                     <?php endforeach;
                     else: ?>
-                        <span style="color:var(--text-muted);font-size:.78rem">Sin servicios</span>
+                        <span style="color:var(--text-muted);font-size:.72rem">—</span>
                     <?php endif; ?>
                 </td>
-                <td class="td-fee">
-                    <?php
-                    $total_cliente = ($c['total_suscripcion'] ?? 0) + ($c['total_implementacion'] ?? 0);
-                    if ($total_cliente > 0): ?>
-                        <strong><?= format_money($total_cliente) ?></strong>
-                    <?php else: ?>
-                        <span style="color:var(--text-muted);font-weight:400">—</span>
-                    <?php endif; ?>
-                </td>
+                <td><?php
+                    $etapa_labels = ['lead'=>'Lead','contactado'=>'Contactado','propuesta'=>'Propuesta','negociacion'=>'Negociación','onboarding'=>'Onboarding','activo'=>'Activo','cerrado_ganado'=>'Cerrado ✓','cerrado_perdido'=>'Cerrado ✗'];
+                    $ep = $c['etapa_pipeline'] ?? '';
+                    $ep_color = in_array($ep, ['activo','cerrado_ganado']) ? 'status-success' : (in_array($ep, ['onboarding','negociacion']) ? 'status-warning' : ($ep === 'cerrado_perdido' ? 'status-danger' : 'status-info'));
+                ?><span class="badge <?= $ep_color ?>" style="font-size:.65rem"><?= $etapa_labels[$ep] ?? ucfirst($ep) ?></span></td>
                 <td><span class="badge-pago-<?= safe($c['estado_pago']) ?>"><?= ucfirst($c['estado_pago']) ?></span></td>
                 <td onclick="event.stopPropagation()">
                     <?php if (can_edit($current_user['id'], 'crm')): ?>
