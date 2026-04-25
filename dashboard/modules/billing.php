@@ -166,21 +166,25 @@ async function extractPdfData(input) {
         const json = await res.json();
         if (json.ok) {
             extractedData = json.data;
-            let html = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.82rem;">';
-            html += '<div style="font-weight:600;margin-bottom:8px;color:var(--accent)">Datos extraidos del PDF:</div>';
-            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
-            if (extractedData.numero_factura) html += `<div><span style="color:var(--text-muted)">N° Factura:</span> <strong>${escHtml(extractedData.numero_factura)}</strong></div>`;
-            if (extractedData.monto) html += `<div><span style="color:var(--text-muted)">Monto:</span> <strong style="color:var(--success)">${fmtMoney(extractedData.monto)}</strong></div>`;
-            if (extractedData.razon_social) html += `<div><span style="color:var(--text-muted)">Razon Social:</span> ${escHtml(extractedData.razon_social)}</div>`;
-            if (extractedData.rut) html += `<div><span style="color:var(--text-muted)">RUT:</span> ${escHtml(extractedData.rut)}</div>`;
-            if (extractedData.fecha) html += `<div><span style="color:var(--text-muted)">Fecha:</span> ${escHtml(extractedData.fecha)}</div>`;
-            if (extractedData.concepto) html += `<div style="grid-column:1/-1"><span style="color:var(--text-muted)">Concepto:</span> ${escHtml(extractedData.concepto)}</div>`;
-            if (extractedData.cliente_sugerido) html += `<div><span style="color:var(--success)">Cliente detectado automaticamente</span></div>`;
-            html += '</div></div>';
-            resultDiv.innerHTML = html;
+            const hasData = extractedData.monto || extractedData.razon_social || extractedData.numero_factura;
+            if (hasData) {
+                let html = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.82rem;">';
+                html += '<div style="font-weight:600;margin-bottom:8px;color:var(--accent)">Datos extraidos del PDF:</div>';
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+                if (extractedData.numero_factura) html += `<div><span style="color:var(--text-muted)">N° Factura:</span> <strong>${escHtml(extractedData.numero_factura)}</strong></div>`;
+                if (extractedData.monto) html += `<div><span style="color:var(--text-muted)">Monto:</span> <strong style="color:var(--success)">${fmtMoney(extractedData.monto)}</strong></div>`;
+                if (extractedData.razon_social) html += `<div><span style="color:var(--text-muted)">Razon Social:</span> ${escHtml(extractedData.razon_social)}</div>`;
+                if (extractedData.rut) html += `<div><span style="color:var(--text-muted)">RUT:</span> ${escHtml(extractedData.rut)}</div>`;
+                if (extractedData.fecha) html += `<div><span style="color:var(--text-muted)">Fecha:</span> ${escHtml(extractedData.fecha)}</div>`;
+                if (extractedData.cliente_sugerido) html += `<div><span style="color:var(--success)">Cliente detectado automaticamente</span></div>`;
+                html += '</div></div>';
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;">No se encontraron datos en el PDF. Completa manualmente en el siguiente paso.</div>`;
+            }
             document.getElementById('btnStep1').disabled = false;
         } else {
-            resultDiv.innerHTML = '<div style="color:var(--warning);font-size:.82rem;">No se pudo extraer datos del PDF. Puedes completar los campos manualmente.</div>';
+            resultDiv.innerHTML = `<div style="color:var(--warning);font-size:.82rem;">${escHtml(json.error || 'Error al procesar')}. Puedes continuar y completar manualmente.</div>`;
             extractedData = {};
             document.getElementById('btnStep1').disabled = false;
         }

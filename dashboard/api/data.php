@@ -23,11 +23,11 @@ error_reporting(E_ERROR);
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 $user_id = (int)$_SESSION['user_id'];
 
-// CSRF para POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// CSRF para POST (excepto uploads que usan FormData con archivos)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'extract_pdf_data') {
     $token = $_POST['csrf_token'] ?? '';
     if (!csrf_validate($token)) {
-        echo json_encode(['ok' => false, 'error' => 'Token CSRF inválido']);
+        echo json_encode(['ok' => false, 'error' => 'Token CSRF inválido. Recarga la página e intenta de nuevo.']);
         exit;
     }
 }
@@ -475,22 +475,19 @@ switch ($action) {
     // ---- EXTRAER DATOS DE PDF ----
     case 'extract_pdf_data':
         if (!can_edit($user_id, 'billing')) fail('Sin permiso');
-        if (empty($_FILES['pdf']) || $_FILES['pdf']['error'] !== UPLOAD_ERR_OK) {
-            // Si no hay archivo o hay error, responder con datos vacíos (no fallar)
-            respond(['monto' => 0, 'razon_social' => '', 'rut' => '', 'numero_factura' => '', 'fecha' => '', 'cliente_sugerido' => null, 'texto_preview' => '']);
+        if (empty($_FILES['pdf'])) {
+            respond(['monto' => 0, 'razon_social' => '', 'rut' => '', 'numero_factura' => '', 'fecha' => '', 'concepto' => '', 'cliente_sugerido' => null, 'texto_preview' => 'No se recibio archivo. FILES keys: ' . implode(',', array_keys($_FILES))]);
+            break;
+        }
+        if ($_FILES['pdf']['error'] !== UPLOAD_ERR_OK) {
+            respond(['monto' => 0, 'razon_social' => '', 'rut' => '', 'numero_factura' => '', 'fecha' => '', 'concepto' => '', 'cliente_sugerido' => null, 'texto_preview' => 'Error upload: ' . $_FILES['pdf']['error']]);
             break;
         }
 
         $tmp = $_FILES['pdf']['tmp_name'];
         $text = '';
 
-        // Intentar pdftotext primero (más confiable)
-        $pdftotext_path = trim(shell_exec('which pdftotext 2>/dev/null') ?? '');
-        if ($pdftotext_path) {
-            $text = shell_exec($pdftotext_path . ' -layout ' . escapeshellarg($tmp) . ' - 2>/dev/null') ?? '';
-        }
-
-        // Fallback: extraer texto de streams comprimidos con PHP puro
+        // Extraer texto de streams comprimidos con PHP puro
         if (strlen(trim($text)) < 10) {
             $raw = file_get_contents($tmp);
             $text = '';
@@ -508,15 +505,19 @@ switch ($action) {
                     }
                 }
                 if ($decoded !== false && strlen($decoded) > 20) {
-                    // Primero decodificar octales en todo el stream
-                    $decoded = preg_replace_callback('/\\\\(\d{3})/', fn($m) => chr(octdec($m[1])), $decoded);
-                    // Decodificar paréntesis escapados
-                    $decoded = str_replace(['\\(', '\\)'], ['(', ')'], $decoded);
-                    // Extraer texto entre paréntesis (ya decodificadas)
-                    if (preg_match_all('/\(([^)]+)\)/', $decoded, $ptexts)) {
-                        $line = implode(' ', $ptexts[1]);
-                        if (preg_match('/[a-zA-Z0-9\$]{2,}/', $line)) {
-                            $text .= $line . "\n";
+                    // Solo procesar si tiene keywords de factura
+                    if (preg_match('/(?:FACTURA|TOTAL|SE|R\.U\.T|EXENT|Fecha)/i', $decoded)) {
+                        // Extraer texto de operadores PDF: (texto)Tj y [(texto)]TJ
+                        // NO decodificar \( \) antes — usar el formato raw del PDF
+                        if (preg_match_all('/\(([^)]*(?:\\\\.[^)]*)*)\)\s*Tj/i', $decoded, $ptexts)) {
+                            foreach ($ptexts[1] as $fragment) {
+                                // Decodificar octales dentro del fragmento
+                                $fragment = preg_replace_callback('/\\\\(\d{3})/', fn($m) => chr(octdec($m[1])), $fragment);
+                                $fragment = str_replace(['\\(', '\\)'], ['(', ')'], $fragment);
+                                if (strlen(trim($fragment)) > 0) {
+                                    $text .= trim($fragment) . "\n";
+                                }
+                            }
                         }
                     }
                 }
@@ -540,41 +541,49 @@ switch ($action) {
             $monto = (int)str_replace(['.', ','], ['', ''], $m[1]);
         }
 
-        // Extraer razón social del cliente (SEÑOR(ES): xxx)
+        // Extraer razón social del cliente — en línea siguiente a SEÑOR(ES):
         $razon_social = '';
-        if (preg_match('/SE.OR(?:\(ES\))?\s*:?\s*(.+)/iu', $text, $m)) {
-            $razon_social = trim($m[1]);
-        }
-
-        // Extraer RUT del cliente
-        // El RUT puede estar en la misma línea o en la siguiente
-        $rut = '';
-        if (preg_match_all('/R\.U\.T\.?\s*:?\s*([\d]{1,2}[\.\d]*-\s*[\dkK])/i', $text, $ruts)) {
-            $rut = isset($ruts[1][1]) ? trim(str_replace(' ', '', $ruts[1][1])) : '';
-        }
-        // Si el segundo R.U.T.: está vacío en la misma línea, buscar en la siguiente
-        if (!$rut || strlen($rut) < 5) {
-            if (preg_match_all('/R\.U\.T\.?\s*:\s*\n?\s*([\d.,\-\s]+)/i', $text, $ruts2)) {
-                foreach ($ruts2[1] as $i => $r) {
-                    $r = trim(str_replace(' ', '', $r));
-                    if ($i > 0 && preg_match('/\d{1,2}[\.\d]+-[\dkK]/i', $r)) {
-                        $rut = $r;
-                        break;
-                    }
+        $lines = explode("\n", $text);
+        for ($li = 0; $li < count($lines); $li++) {
+            if (preg_match('/SE.{0,3}OR/i', $lines[$li]) && isset($lines[$li + 1])) {
+                $next = trim($lines[$li + 1]);
+                if ($next && !preg_match('/^R\.U\.T|^GIRO|^DIREC/i', $next)) {
+                    $razon_social = $next;
+                    break;
                 }
             }
         }
 
-        // Extraer N° factura (Nº1, Nº 123, N° 456)
+        // Extraer RUTs — buscar todos los patrones XX.XXX.XXX-X
+        $rut = '';
+        if (preg_match_all('/(\d{1,2}[\.\d]{4,10}-\s*[\dkK])/i', $text, $allRuts)) {
+            $cleaned = array_map(fn($r) => str_replace(' ', '', $r), $allRuts[1]);
+            $unique = array_unique($cleaned);
+            // El RUT del cliente es el que NO es el emisor (78.373.125-8 = Facand)
+            foreach ($unique as $r) {
+                if (strpos($r, '78.373.125') === false) {
+                    $rut = $r;
+                    break;
+                }
+            }
+        }
+
+        // Extraer N° factura — buscar línea que tenga solo N + algo + dígitos
         $numero_factura = '';
-        if (preg_match('/N[°ºo]\s*(\d+)/iu', $text, $m)) {
-            $numero_factura = $m[1];
+        foreach ($lines as $ln) {
+            $ln = trim($ln);
+            if (preg_match('/^N.{0,3}(\d+)$/i', $ln)) {
+                preg_match('/(\d+)/', $ln, $nm);
+                $numero_factura = $nm[1] ?? '';
+                break;
+            }
         }
 
         // Extraer fecha emisión
         $fecha = '';
         $meses_map = ['enero'=>'01','febrero'=>'02','marzo'=>'03','abril'=>'04','mayo'=>'05','junio'=>'06','julio'=>'07','agosto'=>'08','septiembre'=>'09','octubre'=>'10','noviembre'=>'11','diciembre'=>'12'];
-        if (preg_match('/Fecha\s*Emisi[oó]n\s*:?\s*(\d{1,2})\s*de\s*(\w+)\s*(?:del?\s*)?(\d{4})/iu', $text, $m)) {
+        // Buscar patrón "XX de MES del YYYY" en cualquier línea
+        if (preg_match('/(\d{1,2})\s+de\s+([A-Za-z]+)\s+(?:del?\s+)?(\d{4})/i', $text, $m)) {
             $mes = $meses_map[strtolower($m[2])] ?? '01';
             $fecha = $m[3] . '-' . $mes . '-' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
         } elseif (preg_match('/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/', $text, $m)) {
@@ -604,7 +613,7 @@ switch ($action) {
             'fecha' => $fecha,
             'concepto' => $concepto,
             'cliente_sugerido' => $cliente_sugerido,
-            'texto_preview' => mb_substr($text, 0, 500),
+            'texto_preview' => mb_substr($text, 0, 2000),
         ]);
         break;
 
