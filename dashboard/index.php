@@ -23,6 +23,8 @@ $module_info = $all_modules[$page];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title><?= safe($module_info['nombre']) ?> — <?= safe($app['name']) ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
         :root {
@@ -31,9 +33,9 @@ $module_info = $all_modules[$page];
             --bg: <?= $app['bg'] ?>;
             --surface: <?= $app['surface'] ?>;
             --text: <?= $app['text'] ?>;
-            --text-muted: #94a3b8;
-            --border: #334155;
-            --success: #22c55e;
+            --text-muted: #d3d3d3;
+            --border: #222222;
+            --success: #41d77e;
             --warning: #eab308;
             --danger: #ef4444;
         }

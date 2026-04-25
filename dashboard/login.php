@@ -51,10 +51,12 @@ $app = require __DIR__ . '/config/app.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — <?= htmlspecialchars($app['name']) ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: <?= $app['bg'] ?>;
             color: <?= $app['text'] ?>;
             min-height: 100vh;
@@ -73,12 +75,12 @@ $app = require __DIR__ . '/config/app.php';
         .logo-area { text-align: center; margin-bottom: 32px; }
         .logo-area h1 { font-size: 1.4rem; margin-top: 12px; }
         .form-group { margin-bottom: 20px; }
-        label { display: block; font-size: .85rem; color: #94a3b8; margin-bottom: 6px; }
+        label { display: block; font-size: .85rem; color: #d3d3d3; margin-bottom: 6px; }
         input[type="text"], input[type="password"] {
             width: 100%;
             padding: 10px 14px;
             background: <?= $app['bg'] ?>;
-            border: 1px solid #334155;
+            border: 1px solid #222222;
             border-radius: 8px;
             color: <?= $app['text'] ?>;
             font-size: .95rem;
