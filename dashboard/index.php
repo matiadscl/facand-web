@@ -40,6 +40,17 @@ $module_info = $all_modules[$page];
             --danger: #ef4444;
         }
     </style>
+    <script>
+        const APP = {
+            csrf: '<?= csrf_token() ?>',
+            userId: <?= $current_user['id'] ?>,
+            userRole: '<?= $current_user['role'] ?>',
+            canEdit: <?= can_edit($current_user['id'], $page) ? 'true' : 'false' ?>,
+            currentPage: '<?= $page ?>',
+            currency: '<?= $app['currency'] ?>'
+        };
+    </script>
+    <script src="js/main.js?v=<?= filemtime(__DIR__ . '/js/main.js') ?>"></script>
 </head>
 <body>
     <!-- Overlay para mobile -->
@@ -105,16 +116,5 @@ $module_info = $all_modules[$page];
     <!-- Toast notifications -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script>
-        const APP = {
-            csrf: '<?= csrf_token() ?>',
-            userId: <?= $current_user['id'] ?>,
-            userRole: '<?= $current_user['role'] ?>',
-            canEdit: <?= can_edit($current_user['id'], $page) ? 'true' : 'false' ?>,
-            currentPage: '<?= $page ?>',
-            currency: '<?= $app['currency'] ?>'
-        };
-    </script>
-    <script src="js/main.js"></script>
 </body>
 </html>

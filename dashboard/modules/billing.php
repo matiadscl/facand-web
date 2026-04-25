@@ -316,11 +316,13 @@ function openUploadModal() {
 }
 
 let extractedData = {};
-let uploadedFiles = null;
+let uploadedFiles = []; // Array de File objects (no FileList)
 
 async function extractPdfData(input) {
     const files = input.files;
     if (!files.length) return;
+    // Copiar archivos a array antes de que el DOM cambie
+    uploadedFiles = Array.from(files);
     const resultDiv = document.getElementById('extractionResult');
     resultDiv.style.display = 'block';
     resultDiv.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:.85rem;">Analizando...</div>';
@@ -329,7 +331,7 @@ async function extractPdfData(input) {
     fd.append('csrf_token', APP.csrf);
     fd.append('pdf', files[0]);
     const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 5000);
+    setTimeout(() => ctrl.abort(), 10000);
     try {
         const res = await fetch('api/data.php', { method:'POST', body:fd, signal:ctrl.signal });
         const json = await res.json();
@@ -348,11 +350,11 @@ async function extractPdfData(input) {
 }
 
 function goToStep2() {
-    uploadedFiles = document.getElementById('inputArchivosStep1').files;
     const clienteOpts = Object.entries(bClientesList).map(([id, name]) =>
         `<option value="${id}" ${extractedData.cliente_sugerido == id ? 'selected' : ''}>${escHtml(name)}</option>`).join('');
     const numFact = extractedData.numero_factura ? 'F-' + extractedData.numero_factura : nextNum;
     const montoVal = extractedData.monto || '';
+    const hoy = new Date().toISOString().split('T')[0];
 
     const body = `<form id="frmUpload" style="display:grid;gap:14px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -364,7 +366,7 @@ function goToStep2() {
             ${formField('monto', 'Monto Neto ($) *', 'number', montoVal)}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-            ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
+            <div class="form-group"><label class="form-label">Fecha Emisión</label><input type="date" name="fecha_emision" class="form-input" value="${hoy}"></div>
             <div class="form-group"><label class="form-label">Período</label><input type="month" name="periodo_servicio" class="form-input" value="${mesSel}"></div>
             <div class="form-group"><label class="form-label">Estado pago</label><select name="estado_pago" class="form-select"><option value="pendiente">Pendiente</option><option value="pagada">Ya pagada</option></select></div>
         </div>
@@ -377,6 +379,8 @@ function goToStep2() {
 async function submitUpload() {
     const form = document.getElementById('frmUpload');
     const btn = document.getElementById('btnUpload');
+    if (!form.querySelector('[name="cliente_id"]').value) { toast('Selecciona un cliente', 'error'); return; }
+    if (!form.querySelector('[name="monto"]').value) { toast('Ingresa el monto', 'error'); return; }
     btn.disabled = true; btn.textContent = 'Procesando...';
     const fd = new FormData();
     fd.append('action', 'upload_and_create_invoice');
@@ -385,14 +389,17 @@ async function submitUpload() {
         fd.append(k, form.querySelector(`[name="${k}"]`)?.value || '');
     });
     fd.append('impuesto', '0');
-    if (uploadedFiles) for (let i = 0; i < uploadedFiles.length; i++) fd.append('archivos[]', uploadedFiles[i]);
+    uploadedFiles.forEach((f, i) => fd.append('archivos[]', f));
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 15000);
     try {
-        const res = await fetch('api/data.php', { method:'POST', body:fd });
+        const res = await fetch('api/data.php', { method:'POST', body:fd, signal:ctrl.signal });
         const json = await res.json();
         if (json.ok) { toast('Factura creada'); Modal.close(); refreshPage(); }
-        else toast(json.error || 'Error', 'error');
-    } catch(e) { toast('Error de conexión', 'error'); }
-    finally { btn.disabled = false; btn.textContent = 'Crear Factura'; }
+        else toast(json.error || 'Error al crear factura', 'error');
+    } catch(e) {
+        toast(e.name === 'AbortError' ? 'Timeout — intenta de nuevo' : 'Error de conexión', 'error');
+    } finally { btn.disabled = false; btn.textContent = 'Crear Factura'; }
 }
 
 function openNewInvoice() {

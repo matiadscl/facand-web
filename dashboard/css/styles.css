@@ -302,6 +302,15 @@ tbody tr:last-child td { border-bottom: none; }
 .form-textarea { resize: vertical; min-height: 80px; }
 .form-select { cursor: pointer; }
 
+/* Date/month pickers visibles en tema oscuro */
+.form-input[type="date"],
+.form-input[type="month"] { cursor: pointer; }
+.form-input[type="date"]::-webkit-calendar-picker-indicator,
+.form-input[type="month"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
 /* ============================================================
    MODAL
    ============================================================ */

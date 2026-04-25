@@ -27,6 +27,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Init tabs if present
     initTabs();
+
+    // Modal close handlers (need DOM ready)
+    document.getElementById('modalClose')?.addEventListener('click', Modal.close);
+    document.getElementById('modalOverlay')?.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) Modal.close();
+    });
 });
 
 // ============================================================
@@ -110,11 +116,7 @@ const Modal = {
     }
 };
 
-// Close modal handlers
-document.getElementById('modalClose')?.addEventListener('click', Modal.close);
-document.getElementById('modalOverlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) Modal.close();
-});
+// Close modal handlers moved to DOMContentLoaded above
 
 // ============================================================
 // TOAST NOTIFICATIONS
