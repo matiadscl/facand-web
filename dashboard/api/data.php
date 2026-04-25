@@ -262,6 +262,60 @@ switch ($action) {
         respond();
         break;
 
+    case 'get_budget_items':
+        $items = query_all('SELECT * FROM budget_items WHERE activo = 1 ORDER BY categoria, orden, nombre');
+        respond($items);
+        break;
+
+    case 'create_budget_item':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $cat = input('categoria');
+        $nombre = input('nombre');
+        $tipo = input('tipo_costo') ?: 'fijo';
+        $valor = input_int('valor_default');
+        if (!$cat || !$nombre) fail('Categoría y nombre obligatorios');
+        $orden = query_scalar('SELECT COALESCE(MAX(orden),0)+1 FROM budget_items WHERE categoria = ?', [$cat]) ?? 1;
+        db_execute('INSERT INTO budget_items (categoria, nombre, tipo_costo, valor_default, orden) VALUES (?, ?, ?, ?, ?)',
+            [$cat, $nombre, $tipo, $valor, $orden]);
+        respond(['id' => last_id()]);
+        break;
+
+    case 'update_budget_item':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $id = input_int('id');
+        db_execute('UPDATE budget_items SET nombre=?, tipo_costo=?, valor_default=? WHERE id=?',
+            [input('nombre'), input('tipo_costo'), input_int('valor_default'), $id]);
+        respond();
+        break;
+
+    case 'delete_budget_item':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        db_execute('UPDATE budget_items SET activo = 0 WHERE id = ?', [input_int('id')]);
+        db_execute('DELETE FROM budget_values WHERE item_id = ?', [input_int('id')]);
+        respond();
+        break;
+
+    case 'save_budget_value':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $item_id = input_int('item_id');
+        $mes = input('mes');
+        $valor = input_int('valor');
+        db_execute('INSERT OR REPLACE INTO budget_values (item_id, mes, valor) VALUES (?, ?, ?)', [$item_id, $mes, $valor]);
+        respond();
+        break;
+
+    case 'save_budget_bulk':
+        if (!can_edit($user_id, 'budget') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $data = json_decode($_POST['data'] ?? '[]', true);
+        $saved = 0;
+        foreach ($data as $d) {
+            db_execute('INSERT OR REPLACE INTO budget_values (item_id, mes, valor) VALUES (?, ?, ?)',
+                [(int)$d['item_id'], $d['mes'], (int)$d['valor']]);
+            $saved++;
+        }
+        respond(['saved' => $saved]);
+        break;
+
     // ---- MARKETING ----
     case 'get_campaign':
         $ca = query_one('SELECT * FROM campanas WHERE id = ?', [input_int('id')]);
