@@ -25,7 +25,7 @@ $module_info = $all_modules[$page];
     <title><?= safe($module_info['nombre']) ?> — <?= safe($app['name']) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=<?= filemtime(__DIR__ . '/css/styles.css') ?>">
     <style>
         :root {
             --primary: <?= $app['primary'] ?>;
@@ -47,9 +47,8 @@ $module_info = $all_modules[$page];
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header" style="display:flex;align-items:center;gap:10px;">
-            <img src="assets/img/logo.webp" alt="Facand" style="height:32px;width:auto;">
-            <h2 class="sidebar-brand"><?= safe($app['name']) ?></h2>
+        <div class="sidebar-header" style="display:flex;align-items:center;justify-content:center;">
+            <img src="assets/img/logo.webp" alt="Facand" style="height:36px;width:auto;">
         </div>
         <nav class="sidebar-nav">
             <?php foreach ($all_modules as $slug => $mod): ?>
