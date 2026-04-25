@@ -2,6 +2,13 @@
 /**
  * Módulo Home — Vista panorámica con KPIs, alertas y actividad
  */
+?>
+<style>
+@media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+</style>
+<?php
 
 $total_clientes    = query_scalar('SELECT COUNT(*) FROM clientes WHERE tipo = "activo"') ?? 0;
 $fee_mensual_total = query_scalar('SELECT COALESCE(SUM(fee_mensual),0) FROM clientes WHERE tipo = "activo" AND estado_pago != "canje"') ?? 0;

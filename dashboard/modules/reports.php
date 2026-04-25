@@ -28,6 +28,17 @@ $equipo_report = query_all('SELECT e.nombre,
     FROM equipo e WHERE e.activo = 1 ORDER BY completadas DESC', [$mes]);
 ?>
 
+<style>
+@media print {
+  body, .content { background: #fff !important; color: #000 !important; }
+  .sidebar, .topbar, .btn, .no-print { display: none !important; }
+  .kpi-grid { grid-template-columns: repeat(4, 1fr) !important; }
+  .kpi-card { background: #f8f8f8 !important; color: #000 !important; border: 1px solid #ddd !important; }
+  .data-table th { background: #eee !important; color: #000 !important; }
+  .data-table td { color: #000 !important; border-bottom: 1px solid #ddd !important; }
+}
+</style>
+
 <div class="filters-bar">
     <select class="form-select" onchange="location.href='?page=reports&mes='+this.value">
         <?php for ($i = 0; $i < 12; $i++):

@@ -298,12 +298,10 @@ function openUploadStep2(files) {
 // Store files from step 1 globally
 let uploadedFiles = null;
 
-function openUploadStep2_orig() {} // placeholder
-const _goToStep2 = goToStep2;
-goToStep2 = function() {
+function goToStep2() {
     uploadedFiles = document.getElementById('inputArchivosStep1').files;
     openUploadStep2(uploadedFiles);
-};
+}
 
 function toggleFechaPago(val) {
     document.getElementById('fechaPagoGroup').style.display = val === 'pagada' ? 'block' : 'none';
@@ -335,7 +333,9 @@ function onClienteChange(clienteId) {
         const mes = new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' });
         concepto.value = `Fee mensual ${mes}`;
         monto.value = cliente.fee_mensual;
-        calcIVA();
+        // calcIVA() uses name="monto_neto"; this form uses name="monto"/"impuesto" — calculate inline
+        const impuesto = document.querySelector('#frmUpload [name="impuesto"]');
+        if (impuesto) impuesto.value = Math.round(cliente.fee_mensual * 0.19);
     }
 }
 

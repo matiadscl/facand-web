@@ -8,7 +8,8 @@
  *   - Cuentas vencidas se marcan automáticamente
  */
 
-// Actualizar estados vencidos
+// Actualizar estados vencidos en cada carga — necesario porque SQLite no tiene eventos de tiempo.
+// Los triggers solo actúan al insertar/actualizar, no al pasar el tiempo; este UPDATE es el único mecanismo que marca vencidas en tiempo real.
 db_execute('UPDATE cuentas_cobrar SET estado = "vencido" WHERE estado = "pendiente" AND fecha_vencimiento < date("now") AND fecha_vencimiento IS NOT NULL');
 
 $filtro = $_GET['filtro'] ?? 'pendientes';
@@ -38,8 +39,8 @@ $n_vencidas = query_scalar('SELECT COUNT(*) FROM cuentas_cobrar WHERE estado = "
 
 // Aging (antigüedad de deuda)
 $aging_30 = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido") AND fecha_vencimiento >= date("now", "-30 days")') ?? 0;
-$aging_60 = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido") AND fecha_vencimiento BETWEEN date("now", "-60 days") AND date("now", "-31 days")') ?? 0;
-$aging_90 = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido") AND fecha_vencimiento < date("now", "-60 days")') ?? 0;
+$aging_31_60 = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido") AND fecha_vencimiento BETWEEN date("now", "-60 days") AND date("now", "-31 days")') ?? 0;
+$aging_60plus = query_scalar('SELECT COALESCE(SUM(monto_pendiente),0) FROM cuentas_cobrar WHERE estado IN ("pendiente","parcial","vencido") AND fecha_vencimiento < date("now", "-60 days")') ?? 0;
 
 // Deuda por cliente (top 5)
 $deuda_por_cliente = query_all('SELECT c.nombre, SUM(cc.monto_pendiente) as deuda FROM cuentas_cobrar cc JOIN clientes c ON cc.cliente_id = c.id WHERE cc.estado IN ("pendiente","parcial","vencido") GROUP BY cc.cliente_id ORDER BY deuda DESC LIMIT 5');
@@ -74,19 +75,19 @@ $deuda_por_cliente = query_all('SELECT c.nombre, SUM(cc.monto_pendiente) as deud
                 <div style="display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:4px;">
                     <span>0-30 días</span><span><?= format_money($aging_30) ?></span>
                 </div>
-                <div class="progress-bar"><div class="progress-fill success" style="width:<?= ($aging_30 + $aging_60 + $aging_90) > 0 ? round($aging_30 / ($aging_30 + $aging_60 + $aging_90) * 100) : 0 ?>%"></div></div>
+                <div class="progress-bar"><div class="progress-fill success" style="width:<?= ($aging_30 + $aging_31_60 + $aging_60plus) > 0 ? round($aging_30 / ($aging_30 + $aging_31_60 + $aging_60plus) * 100) : 0 ?>%"></div></div>
             </div>
             <div>
                 <div style="display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:4px;">
-                    <span>31-60 días</span><span><?= format_money($aging_60) ?></span>
+                    <span>31-60 días</span><span><?= format_money($aging_31_60) ?></span>
                 </div>
-                <div class="progress-bar"><div class="progress-fill warning" style="width:<?= ($aging_30 + $aging_60 + $aging_90) > 0 ? round($aging_60 / ($aging_30 + $aging_60 + $aging_90) * 100) : 0 ?>%"></div></div>
+                <div class="progress-bar"><div class="progress-fill warning" style="width:<?= ($aging_30 + $aging_31_60 + $aging_60plus) > 0 ? round($aging_31_60 / ($aging_30 + $aging_31_60 + $aging_60plus) * 100) : 0 ?>%"></div></div>
             </div>
             <div>
                 <div style="display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:4px;">
-                    <span>60+ días</span><span><?= format_money($aging_90) ?></span>
+                    <span>60+ días</span><span><?= format_money($aging_60plus) ?></span>
                 </div>
-                <div class="progress-bar"><div class="progress-fill danger" style="width:<?= ($aging_30 + $aging_60 + $aging_90) > 0 ? round($aging_90 / ($aging_30 + $aging_60 + $aging_90) * 100) : 0 ?>%"></div></div>
+                <div class="progress-bar"><div class="progress-fill danger" style="width:<?= ($aging_30 + $aging_31_60 + $aging_60plus) > 0 ? round($aging_60plus / ($aging_30 + $aging_31_60 + $aging_60plus) * 100) : 0 ?>%"></div></div>
             </div>
         </div>
     </div>

@@ -228,6 +228,24 @@ function escHtml(str) {
 }
 
 // ============================================================
+// IVA HELPERS
+// ============================================================
+/**
+ * Calcula IVA (19%) desde neto y actualiza campos del formulario
+ * Busca inputs con name="monto_neto", "iva", "total"
+ */
+function calcIVA() {
+    const netoEl = document.querySelector('[name="monto_neto"]');
+    const ivaEl = document.querySelector('[name="iva"]');
+    const totalEl = document.querySelector('[name="total"]');
+    if (!netoEl) return;
+    const neto = parseInt(netoEl.value) || 0;
+    const iva = Math.round(neto * 0.19);
+    if (ivaEl) ivaEl.value = iva;
+    if (totalEl) totalEl.value = neto + iva;
+}
+
+// ============================================================
 // FORMAT HELPERS
 // ============================================================
 /**

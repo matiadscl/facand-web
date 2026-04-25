@@ -60,7 +60,7 @@ $equipo = query_all('SELECT e.*,
                 <td>
                     <div style="display:flex;align-items:center;gap:6px;">
                         <div class="progress-bar" style="width:60px;">
-                            <div class="progress-fill <?= $carga_class ?>" style="width:<?= min(100, $carga_total * 10) ?>%"></div>
+                            <div class="progress-fill <?= $carga_class ?>" style="width:<?= min(100, round($carga_total / 15 * 100)) ?>%"></div>
                         </div>
                         <span style="font-size:.75rem;"><?= $carga_total ?></span>
                     </div>

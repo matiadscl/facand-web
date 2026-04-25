@@ -37,6 +37,8 @@ $total_conversiones = array_sum(array_column($campanas, 'conversiones'));
     </div>
 </div>
 
+<p class="text-muted" style="margin-bottom:1rem;font-size:.85rem;">💡 Los datos de campañas se ingresan manualmente. Integración con APIs de Google Ads y Meta Ads pendiente.</p>
+
 <div class="table-container">
     <div class="table-header">
         <span class="table-title">Campañas</span>
@@ -56,6 +58,7 @@ $total_conversiones = array_sum(array_column($campanas, 'conversiones'));
                 <th>Impresiones</th>
                 <th>Clics</th>
                 <th>Conversiones</th>
+                <th>CPC</th>
                 <th>CTR</th>
                 <th>Acciones</th>
             </tr>
@@ -82,6 +85,7 @@ $total_conversiones = array_sum(array_column($campanas, 'conversiones'));
                 <td><?= number_format($ca['impresiones']) ?></td>
                 <td><?= number_format($ca['clics']) ?></td>
                 <td><strong><?= $ca['conversiones'] ?></strong></td>
+                <td><?= format_money($cpc) ?></td>
                 <td><?= $ctr ?>%</td>
                 <td>
                     <?php if (can_edit($current_user['id'], 'marketing')): ?>
@@ -91,7 +95,7 @@ $total_conversiones = array_sum(array_column($campanas, 'conversiones'));
             </tr>
             <?php endforeach; ?>
             <?php if (empty($campanas)): ?>
-            <tr><td colspan="11" class="empty-state">No hay campañas</td></tr>
+            <tr><td colspan="12" class="empty-state">No hay campañas</td></tr>
             <?php endif; ?>
         </tbody>
     </table>
