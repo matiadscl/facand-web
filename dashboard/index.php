@@ -62,13 +62,48 @@ $module_info = $all_modules[$page];
             <img src="assets/img/logo.webp" alt="Facand" style="height:36px;width:auto;">
         </div>
         <nav class="sidebar-nav">
-            <?php foreach ($all_modules as $slug => $mod): ?>
-                <?php if (!in_array($slug, $user_modules)) continue; ?>
+            <?php
+            // Agrupar módulos: los que tienen parent van dentro de un dropdown
+            $groups = ['finanzas' => ['nombre' => 'Finanzas', 'icono' => '&#128200;', 'children' => []]];
+            foreach ($all_modules as $slug => $mod):
+                if (!in_array($slug, $user_modules)) continue;
+                if (isset($mod['parent']) && isset($groups[$mod['parent']])) {
+                    $groups[$mod['parent']]['children'][$slug] = $mod;
+                    continue;
+                }
+                if (isset($mod['parent'])) continue; // parent no accesible
+            ?>
                 <a href="?page=<?= $slug ?>" class="nav-item <?= $page === $slug ? 'active' : '' ?>">
                     <span class="nav-icon"><?= $mod['icono'] ?></span>
                     <span class="nav-label"><?= safe($mod['nombre']) ?></span>
                 </a>
-            <?php endforeach; ?>
+            <?php
+                // Insertar dropdown de finanzas después de tareas
+                if ($slug === 'tasks'):
+                    foreach ($groups as $gkey => $group):
+                        if (empty($group['children'])) continue;
+                        $group_active = isset($all_modules[$page]['parent']) && $all_modules[$page]['parent'] === $gkey;
+            ?>
+                <div class="nav-group <?= $group_active ? 'open' : '' ?>">
+                    <div class="nav-item nav-group-toggle <?= $group_active ? 'active' : '' ?>" onclick="this.parentElement.classList.toggle('open')">
+                        <span class="nav-icon"><?= $group['icono'] ?></span>
+                        <span class="nav-label"><?= safe($group['nombre']) ?></span>
+                        <span class="nav-arrow">&#9656;</span>
+                    </div>
+                    <div class="nav-group-items">
+                        <?php foreach ($group['children'] as $cslug => $cmod): ?>
+                            <a href="?page=<?= $cslug ?>" class="nav-item nav-child <?= $page === $cslug ? 'active' : '' ?>">
+                                <span class="nav-icon" style="font-size:.7rem;"><?= $cmod['icono'] ?></span>
+                                <span class="nav-label"><?= safe($cmod['nombre']) ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php
+                    endforeach;
+                endif;
+            endforeach;
+            ?>
         </nav>
         <div class="sidebar-footer">
             <div class="user-info">

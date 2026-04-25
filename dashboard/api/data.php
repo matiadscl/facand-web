@@ -240,13 +240,14 @@ switch ($action) {
 
     // ---- FINANZAS ----
     case 'create_finance':
-        if (!can_edit($user_id, 'finance')) fail('Sin permiso');
+        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'movements')) fail('Sin permiso');
         $tipo = input('tipo');
         $descripcion = input('descripcion');
         $monto = input_int('monto');
         if (empty($tipo) || empty($descripcion) || $monto <= 0) fail('Tipo, descripción y monto son obligatorios');
-        db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha) VALUES (?, ?, ?, ?, ?, ?)',
-            [$tipo, input('categoria') ?: 'general', $descripcion, $monto, input_int_null('cliente_id'), input('fecha') ?: date('Y-m-d')]);
+        $fecha = input('fecha') ?: date('Y-m-d');
+        db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime("now"))',
+            [$tipo, input('categoria') ?: 'general', input('subcategoria') ?: '', $descripcion, $monto, input_int_null('cliente_id'), $fecha, input('fecha_contable') ?: $fecha, input('origen') ?: 'manual', input('notas') ?: '']);
         log_activity('finance', ucfirst($tipo) . " registrado: " . format_money($monto));
         respond(['id' => last_id()]);
         break;

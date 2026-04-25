@@ -80,6 +80,15 @@ a:hover { opacity: .85; }
 
 .nav-icon { font-size: 1.1rem; width: 24px; text-align: center; }
 
+/* Sidebar dropdown groups */
+.nav-group-toggle { cursor: pointer; user-select: none; }
+.nav-group-toggle .nav-arrow { margin-left: auto; font-size: .7rem; transition: transform .2s; }
+.nav-group.open .nav-group-toggle .nav-arrow { transform: rotate(90deg); }
+.nav-group-items { display: none; }
+.nav-group.open .nav-group-items { display: block; }
+.nav-child { padding-left: 36px !important; font-size: .82rem !important; }
+.nav-child .nav-icon { font-size: .8rem !important; }
+
 .sidebar-footer {
     padding: 12px 16px;
     border-top: 1px solid var(--border);
