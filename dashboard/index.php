@@ -63,35 +63,32 @@ $module_info = $all_modules[$page];
         </div>
         <nav class="sidebar-nav">
             <?php
-            // Agrupar módulos: los que tienen parent van dentro de un dropdown
-            $groups = ['finanzas' => ['nombre' => 'Finanzas', 'icono' => '&#128200;', 'children' => []]];
+            // Pre-agrupar módulos con parent en dropdown
+            $finanzas_children = [];
+            foreach ($all_modules as $slug => $mod) {
+                if (isset($mod['parent']) && $mod['parent'] === 'finanzas' && in_array($slug, $user_modules)) {
+                    $finanzas_children[$slug] = $mod;
+                }
+            }
+            $finanzas_active = isset($all_modules[$page]['parent']) && $all_modules[$page]['parent'] === 'finanzas';
+
             foreach ($all_modules as $slug => $mod):
                 if (!in_array($slug, $user_modules)) continue;
-                if (isset($mod['parent']) && isset($groups[$mod['parent']])) {
-                    $groups[$mod['parent']]['children'][$slug] = $mod;
-                    continue;
-                }
-                if (isset($mod['parent'])) continue; // parent no accesible
+                if (isset($mod['parent'])) continue;
             ?>
                 <a href="?page=<?= $slug ?>" class="nav-item <?= $page === $slug ? 'active' : '' ?>">
                     <span class="nav-icon"><?= $mod['icono'] ?></span>
                     <span class="nav-label"><?= safe($mod['nombre']) ?></span>
                 </a>
-            <?php
-                // Insertar dropdown de finanzas después de tareas
-                if ($slug === 'tasks'):
-                    foreach ($groups as $gkey => $group):
-                        if (empty($group['children'])) continue;
-                        $group_active = isset($all_modules[$page]['parent']) && $all_modules[$page]['parent'] === $gkey;
-            ?>
-                <div class="nav-group <?= $group_active ? 'open' : '' ?>">
-                    <div class="nav-item nav-group-toggle <?= $group_active ? 'active' : '' ?>" onclick="this.parentElement.classList.toggle('open')">
-                        <span class="nav-icon"><?= $group['icono'] ?></span>
-                        <span class="nav-label"><?= safe($group['nombre']) ?></span>
+            <?php if ($slug === 'tasks' && !empty($finanzas_children)): ?>
+                <div class="nav-group <?= $finanzas_active ? 'open' : '' ?>">
+                    <div class="nav-item nav-group-toggle <?= $finanzas_active ? 'active' : '' ?>" onclick="this.parentElement.classList.toggle('open')">
+                        <span class="nav-icon">&#128200;</span>
+                        <span class="nav-label">Finanzas</span>
                         <span class="nav-arrow">&#9656;</span>
                     </div>
                     <div class="nav-group-items">
-                        <?php foreach ($group['children'] as $cslug => $cmod): ?>
+                        <?php foreach ($finanzas_children as $cslug => $cmod): ?>
                             <a href="?page=<?= $cslug ?>" class="nav-item nav-child <?= $page === $cslug ? 'active' : '' ?>">
                                 <span class="nav-icon" style="font-size:.7rem;"><?= $cmod['icono'] ?></span>
                                 <span class="nav-label"><?= safe($cmod['nombre']) ?></span>
@@ -99,11 +96,8 @@ $module_info = $all_modules[$page];
                         <?php endforeach; ?>
                     </div>
                 </div>
-            <?php
-                    endforeach;
-                endif;
-            endforeach;
-            ?>
+            <?php endif; ?>
+            <?php endforeach; ?>
         </nav>
         <div class="sidebar-footer">
             <div class="user-info">
