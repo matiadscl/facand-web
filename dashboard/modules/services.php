@@ -68,13 +68,29 @@ $pres_monto     = query_scalar('SELECT COALESCE(SUM(monto_total),0) FROM presupu
 $por_tipo = query_all('SELECT tipo, estado, COUNT(*) as cantidad, COALESCE(SUM(monto),0) as total_monto FROM servicios_cliente GROUP BY tipo, estado ORDER BY tipo, estado');
 
 // Facturación proyectada por mes (próximos 3 meses)
+// Suscripciones: recurrentes cada mes (si fecha_inicio <= mes)
+// Implementaciones: solo en su mes de inicio (puntuales)
 $meses_proyeccion = [];
 for ($i = 0; $i < 3; $i++) {
     $mes = date('Y-m', strtotime("+$i months"));
+    $mes_fin = date('Y-m-t', strtotime("+$i months"));
+    $mes_ini = $mes . '-01';
     $mes_label = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][(int)date('m', strtotime("+$i months")) - 1] . ' ' . date('Y', strtotime("+$i months"));
-    // Activos ahora + los que inician ese mes o antes
-    $monto = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE estado IN ('activo','pausado') AND (fecha_inicio IS NULL OR fecha_inicio <= '$mes-28')", []) ?? 0;
-    $meses_proyeccion[] = ['mes' => $mes, 'label' => $mes_label, 'monto' => $monto];
+
+    // Suscripciones activas o que inician ese mes o antes
+    $subs = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo = 'suscripcion' AND estado IN ('activo','pausado') AND (fecha_inicio IS NULL OR fecha_inicio <= '$mes_fin')", []) ?? 0;
+    // Implementaciones: solo si su fecha_inicio cae en este mes
+    $impl = query_scalar("SELECT COALESCE(SUM(monto),0) FROM servicios_cliente WHERE tipo IN ('implementacion','adicional') AND estado = 'activo' AND fecha_inicio >= '$mes_ini' AND fecha_inicio <= '$mes_fin'", []) ?? 0;
+
+    // Desglose por cliente para el modal
+    $desglose = query_all("SELECT s.nombre as servicio, s.tipo, s.monto, c.nombre as cliente
+        FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
+        WHERE s.estado IN ('activo','pausado')
+        AND ((s.tipo = 'suscripcion' AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= '$mes_fin'))
+          OR (s.tipo IN ('implementacion','adicional') AND s.fecha_inicio >= '$mes_ini' AND s.fecha_inicio <= '$mes_fin'))
+        ORDER BY s.tipo DESC, s.monto DESC", []);
+
+    $meses_proyeccion[] = ['mes' => $mes, 'label' => $mes_label, 'monto' => $subs + $impl, 'subs' => $subs, 'impl' => $impl, 'desglose' => $desglose];
 }
 ?>
 
@@ -85,15 +101,38 @@ for ($i = 0; $i < 3; $i++) {
     <div class="kpi-card" style="border-left:3px solid var(--text-muted)"><div class="kpi-label">Presup. Aceptados</div><div class="kpi-value success"><?= $pres_aceptados ?></div><div class="kpi-sub"><?= format_money($pres_monto) ?></div></div>
 </div>
 
-<!-- Proyección por mes -->
+<!-- Proyección por mes (click para desglose) -->
 <div style="display:flex;gap:14px;margin-bottom:20px;">
-    <?php foreach ($meses_proyeccion as $mp): ?>
-    <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;text-align:center;">
+    <?php foreach ($meses_proyeccion as $idx => $mp): ?>
+    <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;text-align:center;cursor:pointer;transition:border-color .15s;" onclick="showDesglose(<?= $idx ?>)" title="Click para ver desglose">
         <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;"><?= $mp['label'] ?></div>
-        <div style="font-size:1.2rem;font-weight:700;color:var(--success);margin-top:4px;"><?= format_money($mp['monto']) ?></div>
+        <div style="font-size:1.3rem;font-weight:700;color:var(--success);margin-top:4px;"><?= format_money($mp['monto']) ?></div>
+        <div style="font-size:.68rem;color:var(--text-muted);margin-top:2px;">
+            <?php if ($mp['impl'] > 0): ?>
+                <?= format_money($mp['subs']) ?> suscr. + <?= format_money($mp['impl']) ?> impl.
+            <?php else: ?>
+                <?= format_money($mp['subs']) ?> suscripciones
+            <?php endif; ?>
+        </div>
     </div>
     <?php endforeach; ?>
 </div>
+
+<script>
+const desgloseData = <?= json_encode(array_map(fn($m) => ['label' => $m['label'], 'monto' => $m['monto'], 'desglose' => $m['desglose']], $meses_proyeccion)) ?>;
+
+function showDesglose(idx) {
+    const m = desgloseData[idx];
+    let html = '<table style="width:100%;font-size:.85rem;border-collapse:collapse;">';
+    html += '<thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Cliente</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Servicio</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Tipo</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.75rem;">Monto</th></tr></thead><tbody>';
+    m.desglose.forEach(d => {
+        const tipo = d.tipo === 'suscripcion' ? '<span style="color:var(--accent);font-size:.72rem;">Suscripción</span>' : '<span style="color:#facc15;font-size:.72rem;">Implementación</span>';
+        html += `<tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${escHtml(d.cliente)}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${escHtml(d.servicio)}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);">${tipo}</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);text-align:right;font-weight:600;">${fmtMoney(d.monto)}</td></tr>`;
+    });
+    html += `</tbody><tfoot><tr><td colspan="3" style="padding:8px;font-weight:700;border-top:2px solid var(--border);">Total</td><td style="padding:8px;font-weight:700;text-align:right;border-top:2px solid var(--border);color:var(--success);">${fmtMoney(m.monto)}</td></tr></tfoot></table>`;
+    Modal.open('Desglose ' + m.label, html, '<button class="btn btn-secondary" onclick="Modal.close()">Cerrar</button>');
+}
+</script>
 
 <!-- Tabs -->
 <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);">
