@@ -7,7 +7,7 @@
 
 // Resumen por cliente: facturas + gastos_ads - pagos
 $clientes = query_all("SELECT c.id, c.nombre, c.tipo,
-    COALESCE((SELECT SUM(monto) FROM cuenta_corriente WHERE cliente_id = c.id AND tipo IN ('factura','gasto_ads','ajuste')), 0) as cargos,
+    COALESCE((SELECT SUM(monto) FROM cuenta_corriente WHERE cliente_id = c.id AND tipo IN ('factura','gasto','ajuste')), 0) as cargos,
     COALESCE((SELECT SUM(monto) FROM cuenta_corriente WHERE cliente_id = c.id AND tipo = 'pago'), 0) as pagos,
     COALESCE((SELECT SUM(monto_pendiente) FROM cuentas_cobrar WHERE cliente_id = c.id AND estado IN ('pendiente','parcial','vencido')), 0) as cxc_pendiente
     FROM clientes c WHERE c.tipo = 'activo' ORDER BY c.nombre") ?: [];
@@ -55,7 +55,7 @@ if ($cliente_sel) {
         <span class="table-title">Cuentas Clientes</span>
         <div class="table-actions">
             <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Abono</button>
-            <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto_ads')">+ Gasto Ads</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto')">+ Gasto</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('factura')">+ Cargo</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('ajuste')">+ Ajuste</button>
         </div>
@@ -110,7 +110,7 @@ if ($cliente_sel) {
         <span class="table-title">Detalle — <?= safe($cliente_nombre) ?></span>
         <div class="table-actions">
             <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Abono</button>
-            <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto_ads')">+ Gasto Ads</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto')">+ Gasto</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('factura')">+ Cargo</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('ajuste')">+ Ajuste</button>
         </div>
@@ -155,8 +155,8 @@ if ($cliente_sel) {
         <tbody>
             <?php foreach ($detalle as $d):
                 $es_cargo = ($d['tipo'] !== 'pago');
-                $tipo_labels = ['factura' => 'Factura', 'pago' => 'Pago', 'gasto_ads' => 'Gasto Ads', 'ajuste' => 'Ajuste'];
-                $tipo_badges = ['factura' => 'status-info', 'pago' => 'status-success', 'gasto_ads' => 'status-warning', 'ajuste' => 'status-muted'];
+                $tipo_labels = ['factura' => 'Factura', 'pago' => 'Abono', 'gasto' => 'Gasto', 'ajuste' => 'Ajuste'];
+                $tipo_badges = ['factura' => 'status-info', 'pago' => 'status-success', 'gasto' => 'status-warning', 'ajuste' => 'status-muted'];
                 $saldo_row = $saldos[$d['id']] ?? 0;
             ?>
             <tr>
@@ -183,7 +183,7 @@ const ccClienteId = <?= (int)$cliente_sel ?: 0 ?>;
 const ccClientesList = <?= json_encode(array_column($clientes_list, 'nombre', 'id')) ?>;
 
 function openNewCC(tipo) {
-    const labels = { pago: 'Registrar Abono', gasto_ads: 'Registrar Gasto Ads', factura: 'Registrar Cargo', ajuste: 'Registrar Ajuste' };
+    const labels = { pago: 'Registrar Abono', gasto: 'Registrar Gasto', factura: 'Registrar Cargo', ajuste: 'Registrar Ajuste' };
     const hoy = new Date().toISOString().split('T')[0];
     let clienteField = '';
     if (!ccClienteId) {

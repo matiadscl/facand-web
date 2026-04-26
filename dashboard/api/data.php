@@ -319,7 +319,7 @@ switch ($action) {
     // ---- CUENTA CORRIENTE CLIENTE ----
     case 'get_saldo_cliente':
         $cliente_id = input_int('cliente_id');
-        $cargos = query_scalar("SELECT COALESCE(SUM(monto),0) FROM cuenta_corriente WHERE cliente_id = ? AND tipo IN ('factura','gasto_ads','ajuste')", [$cliente_id]) ?? 0;
+        $cargos = query_scalar("SELECT COALESCE(SUM(monto),0) FROM cuenta_corriente WHERE cliente_id = ? AND tipo IN ('factura','gasto','ajuste')", [$cliente_id]) ?? 0;
         $pagos = query_scalar("SELECT COALESCE(SUM(monto),0) FROM cuenta_corriente WHERE cliente_id = ? AND tipo = 'pago'", [$cliente_id]) ?? 0;
         $saldo = $cargos - $pagos; // negativo = a favor
         respond(['cargos' => $cargos, 'pagos' => $pagos, 'saldo' => $saldo]);
@@ -341,14 +341,9 @@ switch ($action) {
         if (!$cliente_id || !$tipo || !$desc || !$monto) fail('Todos los campos son obligatorios');
         db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, ?, ?, ?, ?)',
             [$cliente_id, $tipo, $desc, $monto, $fecha]);
-        // Si es un pago, registrar también como ingreso en finanzas
-        if ($tipo === 'pago') {
-            db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha, origen, created_at) VALUES ("ingreso", "Servicios profesionales", ?, ?, ?, ?, "manual", datetime("now"))',
-                [$desc, $monto, $cliente_id, $fecha]);
-        }
-        // Si es gasto_ads, registrar como gasto en finanzas
-        if ($tipo === 'gasto_ads') {
-            db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha, origen, created_at) VALUES ("gasto", "Publicidad", ?, ?, ?, ?, "manual", datetime("now"))',
+        // Si es un gasto contra cuenta cliente, registrar en finanzas como gasto
+        if ($tipo === 'gasto') {
+            db_execute('INSERT INTO finanzas (tipo, categoria, descripcion, monto, cliente_id, fecha, origen, created_at) VALUES ("gasto", "Gastos clientes", ?, ?, ?, ?, "manual", datetime("now"))',
                 [$desc, $monto, $cliente_id, $fecha]);
         }
         log_activity('finance', "Cta corriente: $tipo $desc " . format_money($monto), $cliente_id);
