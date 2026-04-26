@@ -548,21 +548,19 @@ ul { list-style: none; }
 .footer__bottom {
   border-top: 1px solid rgba(255,255,255,0.06);
   padding: 16px 24px;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .footer__bottom p {
   font-size: 11px;
   color: var(--text-gray);
-  display: inline;
-}
-
-.footer__bottom p + p::before {
-  content: ' | ';
-  color: rgba(255,255,255,0.1);
+  margin: 0;
 }
 
 .footer__bottom a {
+  font-size: 11px;
   color: var(--text-gray);
   transition: color 0.2s;
 }
@@ -812,11 +810,17 @@ ul { list-style: none; }
   }
 
   .footer__inner {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 28px;
   }
 
   .footer__brand { grid-column: 1 / -1; }
+
+  .footer__bottom {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
 
   .section { padding: 60px 0; }
 }
