@@ -14,6 +14,29 @@ $historial = query_all('SELECT DISTINCT descripcion, categoria, subcategoria FRO
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
+<!-- Importar desde Mercado Pago -->
+<div class="table-container" style="margin-bottom:20px;">
+    <div class="table-header">
+        <span class="table-title">Mercado Pago</span>
+        <div class="table-actions">
+            <button class="btn btn-primary btn-sm" id="btnImportMP" onclick="importMercadoPago()">
+                Importar desde Mercado Pago
+            </button>
+        </div>
+    </div>
+    <div id="mpStatus" style="display:none;padding:16px;text-align:center;"></div>
+    <div id="mpLastSync" style="padding:8px 16px;font-size:.78rem;color:var(--text-muted);">
+        <?php
+        $ultima_sync_mp = query_scalar("SELECT MAX(created_at) FROM finanzas WHERE origen = 'mercadopago'");
+        $total_mp = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago'") ?? 0;
+        echo $ultima_sync_mp
+            ? "Última sincronización: " . date('d/m/Y H:i', strtotime($ultima_sync_mp)) . " — $total_mp movimientos importados"
+            : "Sin importaciones previas";
+        ?>
+    </div>
+</div>
+
+<!-- Importar Cartola Bancaria -->
 <div class="table-container" style="margin-bottom:20px;">
     <div class="table-header">
         <span class="table-title">Importar Cartola Bancaria</span>
@@ -251,4 +274,29 @@ async function confirmImport() {
 
 function cancelImport(){pendingMov=[];document.getElementById('previewSection').style.display='none';}
 function clearFile(){document.getElementById('fileInput').value='';document.getElementById('fileInfo').style.display='none';document.getElementById('processingMsg').style.display='none';}
+
+// ---- Mercado Pago ----
+async function importMercadoPago() {
+    const btn = document.getElementById('btnImportMP');
+    const status = document.getElementById('mpStatus');
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+    status.style.display = 'block';
+    status.innerHTML = '<span style="color:var(--text-muted)">Conectando con Mercado Pago...</span>';
+    try {
+        const res = await API.post('import_mercadopago', {});
+        if (res.ok) {
+            const d = res.data;
+            status.innerHTML = `<span style="color:var(--success);font-weight:600">${d.imported} movimientos importados</span>` +
+                (d.skipped > 0 ? `<span style="color:var(--text-muted);margin-left:12px">(${d.skipped} omitidos por duplicado o rechazados)</span>` : '');
+            if (d.imported > 0) setTimeout(() => location.reload(), 1500);
+        } else {
+            status.innerHTML = `<span style="color:var(--danger)">${res.error || 'Error al importar'}</span>`;
+        }
+    } catch (e) {
+        status.innerHTML = `<span style="color:var(--danger)">Error de conexión: ${e.message}</span>`;
+    }
+    btn.disabled = false;
+    btn.textContent = 'Importar desde Mercado Pago';
+}
 </script>
