@@ -876,6 +876,102 @@ switch ($action) {
         respond();
         break;
 
+    // ---- MERCADO PAGO ----
+    case 'import_mercadopago':
+        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'conciliation')) fail('Sin permiso');
+
+        $cred_file = __DIR__ . '/../../../../.credentials/facand_mercadopago.env';
+        if (!file_exists($cred_file)) fail('Credenciales de Mercado Pago no configuradas');
+
+        $token = '';
+        foreach (file($cred_file) as $line) {
+            if (str_starts_with(trim($line), 'MP_ACCESS_TOKEN=')) {
+                $token = trim(substr(trim($line), strlen('MP_ACCESS_TOKEN=')));
+            }
+        }
+        if (!$token) fail('Access Token no encontrado');
+
+        // Obtener último movimiento MP importado para no duplicar
+        $last_date = query_scalar("SELECT MAX(fecha) FROM finanzas WHERE origen = 'mercadopago'");
+
+        $all_results = [];
+        $offset_mp = 0;
+        $limit_mp = 100;
+
+        do {
+            $params = http_build_query([
+                'sort' => 'date_created',
+                'criteria' => 'asc',
+                'limit' => $limit_mp,
+                'offset' => $offset_mp,
+            ]);
+            $url = "https://api.mercadopago.com/v1/payments/search?$params";
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
+                CURLOPT_TIMEOUT => 30,
+            ]);
+            $resp = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($http_code !== 200) fail("Error de Mercado Pago (HTTP $http_code)");
+
+            $data = json_decode($resp, true);
+            if (!$data || !isset($data['results'])) fail('Respuesta inválida de Mercado Pago');
+
+            $all_results = array_merge($all_results, $data['results']);
+            $offset_mp += $limit_mp;
+            $total = $data['paging']['total'] ?? 0;
+        } while ($offset_mp < $total);
+
+        $imported = 0;
+        $skipped = 0;
+        $movements = [];
+
+        foreach ($all_results as $p) {
+            if ($p['status'] !== 'approved') { $skipped++; continue; }
+
+            $fecha = substr($p['date_created'] ?? '', 0, 10);
+            $desc = $p['description'] ?? 'Sin descripción';
+            $monto = (int)($p['transaction_amount'] ?? 0);
+            $op_type = $p['operation_type'] ?? '';
+            $method = $p['payment_method_id'] ?? '';
+            $mp_id = (string)($p['id'] ?? '');
+
+            // Determinar tipo: account_fund = ingreso, regular_payment = gasto
+            $tipo = ($op_type === 'account_fund') ? 'ingreso' : 'gasto';
+            $categoria = ($tipo === 'ingreso') ? 'Transferencia MP' : 'Servicios digitales';
+
+            // Evitar duplicados por mp_id en notas
+            $exists = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago' AND notas LIKE ?", ["%mp_id:$mp_id%"]);
+            if ($exists > 0) { $skipped++; continue; }
+
+            db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "mercadopago", ?, datetime("now"))',
+                [$tipo, $categoria, $method, $desc, $monto, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
+
+            $movements[] = [
+                'fecha' => $fecha,
+                'tipo' => $tipo,
+                'descripcion' => $desc,
+                'monto' => $monto,
+                'metodo' => $method,
+                'mp_id' => $mp_id,
+            ];
+            $imported++;
+        }
+
+        log_activity('conciliation', "Importación Mercado Pago: $imported nuevos, $skipped omitidos");
+        respond(['imported' => $imported, 'skipped' => $skipped, 'total_api' => count($all_results), 'movements' => $movements]);
+        break;
+
+    case 'get_mp_movements':
+        $movs = query_all("SELECT id, tipo, categoria, subcategoria, descripcion, monto, fecha, notas, created_at FROM finanzas WHERE origen = 'mercadopago' ORDER BY fecha DESC, id DESC");
+        respond($movs ?: []);
+        break;
+
     default:
         fail('Acción no reconocida: ' . $action);
 }
