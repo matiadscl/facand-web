@@ -75,7 +75,7 @@ $balance_resultado_acum = $balance_ingresos_total - $balance_gastos_total;
 
                     <tr style="font-weight:700;background:var(--bg);"><td colspan="2" style="padding:10px 14px;">PASIVOS</td></tr>
                     <tr>
-                        <td style="padding-left:24px;">Saldos a favor clientes</td>
+                        <td style="padding-left:24px;">Cuentas clientes (disponible)</td>
                         <td style="text-align:right;font-weight:600;color:var(--warning)"><?= format_money($balance_favor) ?></td>
                     </tr>
                     <tr style="font-size:.72rem;color:var(--text-muted);">

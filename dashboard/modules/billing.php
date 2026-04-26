@@ -262,10 +262,10 @@ async function emitirServicio(clienteId, servicio, monto, periodo) {
         if (res && res.data && res.data.saldo < 0) {
             saldoFavor = Math.abs(res.data.saldo);
             saldoInfo = `<div style="background:rgba(65,215,126,.08);border:1px solid rgba(65,215,126,.2);padding:10px 12px;border-radius:8px;margin-top:2px;">
-                <div style="font-size:.78rem;color:var(--success);font-weight:600;">Saldo a favor: ${fmtMoney(saldoFavor)}</div>
+                <div style="font-size:.78rem;color:var(--success);font-weight:600;">Cuenta cliente — disponible: ${fmtMoney(saldoFavor)}</div>
                 <label style="font-size:.75rem;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;">
                     <input type="checkbox" name="imputar_saldo" value="1" checked style="accent-color:var(--success);">
-                    Imputar pago desde saldo a favor
+                    Imputar pago desde cuenta cliente
                 </label>
             </div>`;
         }
@@ -299,7 +299,7 @@ async function emitirServicio(clienteId, servicio, monto, periodo) {
         <div id="fpGroup" style="${saldoFavor >= monto ? 'display:block;' : 'display:none;'}">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div class="form-group"><label class="form-label">Fecha pago</label><input type="date" name="fecha_pago" class="form-input" value="${new Date().toISOString().split('T')[0]}"></div>
-                ${formField('metodo_pago', 'Método', 'select', saldoFavor > 0 ? 'saldo_favor' : 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Saldo a favor',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
+                ${formField('metodo_pago', 'Método', 'select', saldoFavor > 0 ? 'saldo_favor' : 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Cuenta cliente',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
             </div>
         </div>
         <input type="hidden" name="periodo_servicio" value="${periodo}">
@@ -467,7 +467,7 @@ function openNewInvoice() {
         <div id="fpGroupManual" style="display:none;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div class="form-group"><label class="form-label">Fecha pago</label><input type="date" name="fecha_pago" class="form-input" value="${hoy}"></div>
-                ${formField('metodo_pago', 'Método', 'select', 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Saldo a favor',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
+                ${formField('metodo_pago', 'Método', 'select', 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Cuenta cliente',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
             </div>
         </div>
         <div id="saldoInfoManual"></div>
@@ -491,10 +491,10 @@ function openNewInvoice() {
                 if (res && res.data && res.data.saldo < 0) {
                     const sf = Math.abs(res.data.saldo);
                     div.innerHTML = `<div style="background:rgba(65,215,126,.08);border:1px solid rgba(65,215,126,.2);padding:10px 12px;border-radius:8px;">
-                        <div style="font-size:.78rem;color:var(--success);font-weight:600;">Saldo a favor: ${fmtMoney(sf)}</div>
+                        <div style="font-size:.78rem;color:var(--success);font-weight:600;">Cuenta cliente — disponible: ${fmtMoney(sf)}</div>
                         <label style="font-size:.75rem;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;">
                             <input type="checkbox" name="imputar_saldo" value="1" checked style="accent-color:var(--success);">
-                            Imputar pago desde saldo a favor
+                            Imputar pago desde cuenta cliente
                         </label>
                     </div>`;
                 } else { div.innerHTML = ''; }

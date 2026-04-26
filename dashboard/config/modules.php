@@ -11,7 +11,7 @@ return [
     'tasks'       => ['nombre' => 'Tareas',             'icono' => '&#9745;',  'archivo' => 'modules/tasks.php',       'descripcion' => 'Gestión de tareas y asignaciones'],
     'billing'     => ['nombre' => 'Facturación',        'icono' => '&#128179;','archivo' => 'modules/billing.php',     'descripcion' => 'Emisión y control de facturas',        'parent' => 'finanzas'],
     'receivables' => ['nombre' => 'Cuentas por Cobrar', 'icono' => '&#128176;','archivo' => 'modules/receivables.php', 'descripcion' => 'Seguimiento de cobros pendientes',    'parent' => 'finanzas'],
-    'cta_corriente'=> ['nombre' => 'Cta. Corriente',    'icono' => '&#128179;','archivo' => 'modules/cta_corriente.php','descripcion' => 'Cuenta corriente por cliente',       'parent' => 'finanzas'],
+    'cta_corriente'=> ['nombre' => 'Cuentas Clientes',   'icono' => '&#128179;','archivo' => 'modules/cta_corriente.php','descripcion' => 'Cuenta por cliente: saldos y abonos', 'parent' => 'finanzas'],
     'movements'   => ['nombre' => 'Movimientos',        'icono' => '&#128203;','archivo' => 'modules/movements.php',   'descripcion' => 'Ingresos, gastos y registro completo', 'parent' => 'finanzas'],
     'cartolas'    => ['nombre' => 'Cartolas',            'icono' => '&#127974;','archivo' => 'modules/cartolas.php',    'descripcion' => 'Importar cartolas bancarias',          'parent' => 'finanzas'],
     'conciliation'=> ['nombre' => 'Conciliación',       'icono' => '&#128256;','archivo' => 'modules/conciliation.php','descripcion' => 'Cruce banco vs facturas y SII',        'parent' => 'finanzas'],
