@@ -54,9 +54,10 @@ if ($cliente_sel) {
     <div class="table-header">
         <span class="table-title">Cuenta Corriente por Cliente</span>
         <div class="table-actions">
-            <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Pago Recibido</button>
+            <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Abono</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto_ads')">+ Gasto Ads</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('factura')">+ Cargo</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('ajuste')">+ Ajuste</button>
         </div>
     </div>
     <table>
@@ -108,9 +109,10 @@ if ($cliente_sel) {
     <div class="table-header">
         <span class="table-title">Detalle — <?= safe($cliente_nombre) ?></span>
         <div class="table-actions">
-            <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Pago Recibido</button>
+            <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Abono</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto_ads')">+ Gasto Ads</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('factura')">+ Cargo</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('ajuste')">+ Ajuste</button>
         </div>
     </div>
 
@@ -181,7 +183,7 @@ const ccClienteId = <?= (int)$cliente_sel ?: 0 ?>;
 const ccClientesList = <?= json_encode(array_column($clientes_list, 'nombre', 'id')) ?>;
 
 function openNewCC(tipo) {
-    const labels = { pago: 'Pago Recibido', gasto_ads: 'Gasto Ads', factura: 'Cargo / Factura', ajuste: 'Ajuste' };
+    const labels = { pago: 'Registrar Abono', gasto_ads: 'Registrar Gasto Ads', factura: 'Registrar Cargo', ajuste: 'Registrar Ajuste' };
     const hoy = new Date().toISOString().split('T')[0];
     let clienteField = '';
     if (!ccClienteId) {

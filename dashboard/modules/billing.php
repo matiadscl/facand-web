@@ -447,16 +447,29 @@ async function submitUpload() {
 }
 
 function openNewInvoice() {
+    const hoy = new Date().toISOString().split('T')[0];
     const body = `<form id="frmInvoice" class="form-grid">
         ${formField('numero', 'N° Factura', 'text', nextNum, {required: true})}
         ${formField('cliente_id', 'Cliente', 'select', '', {required: true, options: bClientesList})}
         ${formField('concepto', 'Concepto', 'text', '', {required: true})}
         ${formField('monto', 'Monto Neto', 'number', '', {required: true})}
         ${formField('impuesto', 'IVA (19%)', 'number', '')}
-        ${formField('estado', 'Estado', 'select', 'emitida', {options: {borrador:'Borrador', emitida:'Emitida'}})}
         <div class="form-group"><label class="form-label">Período</label><input type="month" name="periodo_servicio" class="form-input" value="${mesSel}"></div>
-        ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
-        ${formField('fecha_vencimiento', 'Fecha Vencimiento', 'date')}
+        <div class="form-group"><label class="form-label">Fecha Emisión</label><input type="date" name="fecha_emision" class="form-input" value="${hoy}"></div>
+        <div class="form-group">
+            <label class="form-label">Estado de pago</label>
+            <select name="estado_pago" class="form-select" onchange="document.getElementById('fpGroupManual').style.display=this.value==='pagada'?'block':'none'">
+                <option value="pendiente">Pendiente</option>
+                <option value="pagada">Ya pagada</option>
+            </select>
+        </div>
+        <div id="fpGroupManual" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group"><label class="form-label">Fecha pago</label><input type="date" name="fecha_pago" class="form-input" value="${hoy}"></div>
+                ${formField('metodo_pago', 'Método', 'select', 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Saldo a favor',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
+            </div>
+        </div>
+        <div id="saldoInfoManual"></div>
         ${formField('detalle', 'Detalle', 'textarea', '', {fullWidth: true})}
     </form>`;
     Modal.open('Nueva Factura Manual', body,
@@ -466,14 +479,48 @@ function openNewInvoice() {
         const m = document.querySelector('#frmInvoice [name="monto"]');
         const i = document.querySelector('#frmInvoice [name="impuesto"]');
         if (m && i) m.addEventListener('input', () => { i.value = Math.round(parseInt(m.value||0)*0.19); });
+        // Al cambiar cliente, consultar saldo
+        const sel = document.querySelector('#frmInvoice [name="cliente_id"]');
+        if (sel) sel.addEventListener('change', async () => {
+            const cid = sel.value;
+            const div = document.getElementById('saldoInfoManual');
+            if (!cid) { div.innerHTML = ''; return; }
+            try {
+                const res = await API.get('get_saldo_cliente', { cliente_id: cid });
+                if (res && res.data && res.data.saldo < 0) {
+                    const sf = Math.abs(res.data.saldo);
+                    div.innerHTML = `<div style="background:rgba(65,215,126,.08);border:1px solid rgba(65,215,126,.2);padding:10px 12px;border-radius:8px;">
+                        <div style="font-size:.78rem;color:var(--success);font-weight:600;">Saldo a favor: ${fmtMoney(sf)}</div>
+                        <label style="font-size:.75rem;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;">
+                            <input type="checkbox" name="imputar_saldo" value="1" checked style="accent-color:var(--success);">
+                            Imputar pago desde saldo a favor
+                        </label>
+                    </div>`;
+                } else { div.innerHTML = ''; }
+            } catch(e) { div.innerHTML = ''; }
+        });
     }, 100);
 }
 
 async function saveInvoice() {
     const data = getFormData('frmInvoice');
     data.total = parseInt(data.monto||0) + parseInt(data.impuesto||0);
-    const res = await API.post('create_invoice', data);
-    if (res) { toast('Factura creada'); refreshPage(); }
+    data.estado = 'emitida';
+    const res = await API.post('upload_and_create_invoice', data);
+    if (res) {
+        // Imputar en cuenta corriente si aplica
+        const imputar = document.querySelector('#frmInvoice [name="imputar_saldo"]');
+        if (imputar && imputar.checked && data.estado_pago === 'pagada') {
+            await API.post('create_cc_movimiento', {
+                cliente_id: data.cliente_id,
+                tipo: 'factura',
+                descripcion: 'Factura ' + (data.numero || '') + ' — ' + (data.concepto || ''),
+                monto: parseInt(data.monto),
+                fecha: data.fecha_emision || new Date().toISOString().split('T')[0]
+            });
+        }
+        toast('Factura creada'); refreshPage();
+    }
 }
 
 async function cancelInvoice(id) {
