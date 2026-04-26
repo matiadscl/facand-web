@@ -311,9 +311,10 @@ async function emitirServicio(clienteId, servicio, monto, periodo) {
 
 async function submitEmitir() {
     const data = getFormData('frmEmitir');
-    if (!data.monto || data.monto <= 0) { toast('Ingresa el monto', 'error'); return; }
+    if (data.monto === '' || data.monto === undefined) { toast('Ingresa el monto', 'error'); return; }
     data.impuesto = 0;
-    data.total = parseInt(data.monto);
+    data.monto = parseInt(data.monto) || 0;
+    data.total = data.monto;
     data.estado = 'emitida';
     const res = await API.post('upload_and_create_invoice', data);
     if (res) {
