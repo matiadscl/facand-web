@@ -878,7 +878,7 @@ switch ($action) {
 
     // ---- MERCADO PAGO ----
     case 'import_mercadopago':
-        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'conciliation')) fail('Sin permiso');
+        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'cartolas') && !can_edit($user_id, 'conciliation')) fail('Sin permiso');
 
         // Buscar credenciales: primero data/mp.env (servidor), luego .credentials/ (VPS)
         $cred_paths = [
