@@ -252,15 +252,34 @@ const bClientesData = <?= json_encode(array_combine(array_column($clientes_list,
 const nextNum = '<?= $next_num ?>';
 const mesSel = '<?= $mes_sel ?>';
 
-function emitirServicio(clienteId, servicio, monto, periodo) {
+async function emitirServicio(clienteId, servicio, monto, periodo) {
     const clienteNombre = bClientesList[clienteId] || '';
+    // Consultar saldo a favor del cliente
+    let saldoInfo = '';
+    let saldoFavor = 0;
+    try {
+        const res = await API.get('get_saldo_cliente', { cliente_id: clienteId });
+        if (res && res.data && res.data.saldo < 0) {
+            saldoFavor = Math.abs(res.data.saldo);
+            saldoInfo = `<div style="background:rgba(65,215,126,.08);border:1px solid rgba(65,215,126,.2);padding:10px 12px;border-radius:8px;margin-top:2px;">
+                <div style="font-size:.78rem;color:var(--success);font-weight:600;">Saldo a favor: ${fmtMoney(saldoFavor)}</div>
+                <label style="font-size:.75rem;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;">
+                    <input type="checkbox" name="imputar_saldo" value="1" checked style="accent-color:var(--success);">
+                    Imputar pago desde saldo a favor
+                </label>
+            </div>`;
+        }
+    } catch(e) {}
+
     const body = `<form id="frmEmitir" style="display:grid;gap:14px;">
         <input type="hidden" name="cliente_id" value="${clienteId}">
+        <input type="hidden" name="saldo_favor" value="${saldoFavor}">
         <div style="background:var(--bg);padding:12px;border-radius:8px;border:1px solid var(--border);">
             <div style="font-size:.82rem;color:var(--text-muted);">Cliente</div>
             <div style="font-weight:700;margin-top:2px;">${escHtml(clienteNombre)}</div>
             <div style="font-size:.82rem;color:var(--text-muted);margin-top:6px;">Servicio</div>
             <div style="margin-top:2px;">${escHtml(servicio)}</div>
+            ${saldoInfo}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             ${formField('numero', 'N° Factura', 'text', nextNum)}
@@ -268,19 +287,19 @@ function emitirServicio(clienteId, servicio, monto, periodo) {
         </div>
         ${formField('concepto', 'Concepto', 'text', servicio + ' — ' + periodo)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            ${formField('fecha_emision', 'Fecha Emisión', 'date', new Date().toISOString().split('T')[0])}
+            <div class="form-group"><label class="form-label">Fecha Emisión</label><input type="date" name="fecha_emision" class="form-input" value="${new Date().toISOString().split('T')[0]}"></div>
             <div class="form-group">
                 <label class="form-label">Estado de pago</label>
                 <select name="estado_pago" class="form-select" onchange="document.getElementById('fpGroup').style.display=this.value==='pagada'?'block':'none'">
-                    <option value="pendiente">Pendiente</option>
-                    <option value="pagada">Ya pagada</option>
+                    <option value="pendiente"${saldoFavor >= monto ? '' : ' selected'}>Pendiente</option>
+                    <option value="pagada"${saldoFavor >= monto ? ' selected' : ''}>Ya pagada</option>
                 </select>
             </div>
         </div>
-        <div id="fpGroup" style="display:none;">
+        <div id="fpGroup" style="${saldoFavor >= monto ? 'display:block;' : 'display:none;'}">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                ${formField('fecha_pago', 'Fecha pago', 'date', new Date().toISOString().split('T')[0])}
-                ${formField('metodo_pago', 'Método', 'select', 'transferencia', {options:{transferencia:'Transferencia',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
+                <div class="form-group"><label class="form-label">Fecha pago</label><input type="date" name="fecha_pago" class="form-input" value="${new Date().toISOString().split('T')[0]}"></div>
+                ${formField('metodo_pago', 'Método', 'select', saldoFavor > 0 ? 'saldo_favor' : 'transferencia', {options:{transferencia:'Transferencia',saldo_favor:'Saldo a favor',efectivo:'Efectivo',cheque:'Cheque',tarjeta:'Tarjeta'}})}
             </div>
         </div>
         <input type="hidden" name="periodo_servicio" value="${periodo}">
@@ -297,7 +316,20 @@ async function submitEmitir() {
     data.total = parseInt(data.monto);
     data.estado = 'emitida';
     const res = await API.post('upload_and_create_invoice', data);
-    if (res) { toast('Factura emitida'); refreshPage(); }
+    if (res) {
+        // Si se imputa desde saldo a favor, registrar cargo en cuenta corriente
+        const imputar = document.querySelector('[name="imputar_saldo"]');
+        if (imputar && imputar.checked && data.estado_pago === 'pagada') {
+            await API.post('create_cc_movimiento', {
+                cliente_id: data.cliente_id,
+                tipo: 'factura',
+                descripcion: 'Factura ' + (data.numero || '') + ' — ' + (data.concepto || ''),
+                monto: parseInt(data.monto),
+                fecha: data.fecha_emision || new Date().toISOString().split('T')[0]
+            });
+        }
+        toast('Factura emitida'); refreshPage();
+    }
 }
 
 // ============================================================

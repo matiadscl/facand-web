@@ -317,6 +317,14 @@ switch ($action) {
         break;
 
     // ---- CUENTA CORRIENTE CLIENTE ----
+    case 'get_saldo_cliente':
+        $cliente_id = input_int('cliente_id');
+        $cargos = query_scalar("SELECT COALESCE(SUM(monto),0) FROM cuenta_corriente WHERE cliente_id = ? AND tipo IN ('factura','gasto_ads','ajuste')", [$cliente_id]) ?? 0;
+        $pagos = query_scalar("SELECT COALESCE(SUM(monto),0) FROM cuenta_corriente WHERE cliente_id = ? AND tipo = 'pago'", [$cliente_id]) ?? 0;
+        $saldo = $cargos - $pagos; // negativo = a favor
+        respond(['cargos' => $cargos, 'pagos' => $pagos, 'saldo' => $saldo]);
+        break;
+
     case 'get_cta_corriente':
         $cliente_id = input_int('cliente_id');
         $movs = query_all('SELECT * FROM cuenta_corriente WHERE cliente_id = ? ORDER BY fecha DESC, id DESC', [$cliente_id]);
