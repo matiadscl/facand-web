@@ -285,13 +285,13 @@ async function importMercadoPago() {
     status.innerHTML = '<span style="color:var(--text-muted)">Conectando con Mercado Pago...</span>';
     try {
         const res = await API.post('import_mercadopago', {});
-        if (res.ok) {
+        if (res && res.ok) {
             const d = res.data;
             status.innerHTML = `<span style="color:var(--success);font-weight:600">${d.imported} movimientos importados</span>` +
                 (d.skipped > 0 ? `<span style="color:var(--text-muted);margin-left:12px">(${d.skipped} omitidos por duplicado o rechazados)</span>` : '');
             if (d.imported > 0) setTimeout(() => location.reload(), 1500);
         } else {
-            status.innerHTML = `<span style="color:var(--danger)">${res.error || 'Error al importar'}</span>`;
+            status.innerHTML = `<span style="color:var(--danger)">Error al importar. Revisa la consola del navegador para más detalles.</span>`;
         }
     } catch (e) {
         status.innerHTML = `<span style="color:var(--danger)">Error de conexión: ${e.message}</span>`;

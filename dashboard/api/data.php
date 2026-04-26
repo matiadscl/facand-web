@@ -880,16 +880,22 @@ switch ($action) {
     case 'import_mercadopago':
         if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'conciliation')) fail('Sin permiso');
 
-        $cred_file = __DIR__ . '/../../../../.credentials/facand_mercadopago.env';
-        if (!file_exists($cred_file)) fail('Credenciales de Mercado Pago no configuradas');
-
+        // Buscar credenciales: primero data/mp.env (servidor), luego .credentials/ (VPS)
+        $cred_paths = [
+            __DIR__ . '/../data/mp.env',
+            __DIR__ . '/../../../../.credentials/facand_mercadopago.env',
+        ];
         $token = '';
-        foreach (file($cred_file) as $line) {
-            if (str_starts_with(trim($line), 'MP_ACCESS_TOKEN=')) {
-                $token = trim(substr(trim($line), strlen('MP_ACCESS_TOKEN=')));
+        foreach ($cred_paths as $cred_file) {
+            if (!file_exists($cred_file)) continue;
+            foreach (file($cred_file) as $line) {
+                if (str_starts_with(trim($line), 'MP_ACCESS_TOKEN=')) {
+                    $token = trim(substr(trim($line), strlen('MP_ACCESS_TOKEN=')));
+                    break 2;
+                }
             }
         }
-        if (!$token) fail('Access Token no encontrado');
+        if (!$token) fail('Credenciales de Mercado Pago no configuradas. Crear data/mp.env con MP_ACCESS_TOKEN=...');
 
         // Obtener último movimiento MP importado para no duplicar
         $last_date = query_scalar("SELECT MAX(fecha) FROM finanzas WHERE origen = 'mercadopago'");
