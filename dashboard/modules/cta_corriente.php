@@ -53,6 +53,11 @@ if ($cliente_sel) {
 <div class="table-container" style="margin-bottom:20px;">
     <div class="table-header">
         <span class="table-title">Cuenta Corriente por Cliente</span>
+        <div class="table-actions">
+            <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Pago Recibido</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto_ads')">+ Gasto Ads</button>
+            <button class="btn btn-secondary btn-sm" onclick="openNewCC('factura')">+ Cargo</button>
+        </div>
     </div>
     <table>
         <thead>
