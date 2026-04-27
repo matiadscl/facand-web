@@ -144,7 +144,21 @@ switch ($action) {
     // ---- TAREAS ----
     case 'get_task':
         $t = query_one('SELECT * FROM tareas WHERE id = ?', [input_int('id')]);
-        $t ? respond($t) : fail('Tarea no encontrada');
+        if (!$t) fail('Tarea no encontrada');
+        // Cargar gestiones
+        $t['gestiones'] = query_all('SELECT g.*, u.nombre as usuario_nombre FROM gestiones_tarea g LEFT JOIN usuarios u ON g.usuario_id = u.id WHERE g.tarea_id = ? ORDER BY g.created_at DESC', [$t['id']]) ?: [];
+        respond($t);
+        break;
+
+    case 'create_gestion':
+        if (!can_edit($user_id, 'tasks')) fail('Sin permiso');
+        $tarea_id = input_int('tarea_id');
+        $contenido = input('contenido');
+        if (!$tarea_id || !$contenido) fail('Tarea y contenido son obligatorios');
+        db_execute('INSERT INTO gestiones_tarea (tarea_id, usuario_id, contenido) VALUES (?, ?, ?)',
+            [$tarea_id, $user_id, $contenido]);
+        log_activity('tasks', "Gestión registrada en tarea #$tarea_id");
+        respond(['id' => last_id()]);
         break;
 
     case 'create_task':
