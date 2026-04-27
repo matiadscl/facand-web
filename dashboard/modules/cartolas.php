@@ -401,12 +401,15 @@ function rebuildMPTable() {
             </div>`;
         }
 
-        // Acción
-        let actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value;rebuildMPTable()">`;
-        actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
-        if (m.match_existente || m.match_factura) actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
-        if (m.tipo === 'ingreso') actionHtml += `<option value="abono_cc"${m.action==='abono_cc'?' selected':''}>Abono cta cliente</option>`;
-        actionHtml += `<option value="skip">Omitir</option></select>`;
+        // Acción: solo visible sin desglose (con desglose cada sub-línea decide)
+        let actionHtml = '';
+        if (!isDesglosado) {
+            actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value;rebuildMPTable()">`;
+            actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
+            if (m.match_existente || m.match_factura) actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
+            if (m.tipo === 'ingreso') actionHtml += `<option value="abono_cc"${m.action==='abono_cc'?' selected':''}>Abono cta cliente</option>`;
+            actionHtml += `<option value="skip">Omitir</option></select>`;
+        }
 
         // Botón desglosar
         const desgloseBtn = isDesglosado
