@@ -49,8 +49,7 @@ $total_mp = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadop
                     <th style="width:85px">Fecha</th>
                     <th>Descripción</th>
                     <th style="text-align:right;width:100px">Monto</th>
-                    <th style="width:200px">Clasificación EERR</th>
-                    <th style="width:130px">Cliente</th>
+                    <th style="width:250px">Clasificación</th>
                     <th style="width:190px">Conciliación</th>
                     <th style="width:90px">Acción</th>
                 </tr></thead>
@@ -305,7 +304,7 @@ function clearFile(){document.getElementById('fileInput').value='';document.getE
 
 // ---- Mercado Pago ----
 const mpClientes = <?= json_encode($clientes_mp) ?>;
-const mpSocios = <?= json_encode(query_all('SELECT id, nombre FROM equipo ORDER BY id') ?: []) ?>;
+const mpSocios = <?= json_encode(query_all("SELECT id, nombre FROM equipo WHERE nombre IN ('Matías Hidalgo','Fabián Astorga') ORDER BY id") ?: []) ?>;
 let mpPendingItems = [];
 let mpCategorias = []; // se llena desde la API
 
@@ -422,25 +421,19 @@ function rebuildMPTable() {
         const tr = document.createElement('tr');
         tr.style.cssText = isDesglosado ? 'background:var(--bg);' : (isAbono ? 'background:rgba(56,189,248,.04);' : '');
 
-        // Columna clasificación: depende del modo
+        // Columna clasificación unificada
         let clasificacionHtml;
         if (isAbono && !isDesglosado) {
-            // Inicializar concepto_tipo si no existe
-            if (!m.concepto_tipo) m.concepto_tipo = 'cliente';
-            clasificacionHtml = buildCceSelectors(i, null, m);
+            if (!m.concepto_tipo) m.concepto_tipo = 'transferencia';
+            clasificacionHtml = buildCceSelectors(i, null, m) + buildCceEntitySelector(i, null, m);
         } else if (isDesglosado) {
             clasificacionHtml = '<span style="font-size:.72rem;color:var(--text-muted)">Ver desglose abajo</span>';
         } else {
             clasificacionHtml = buildEerrSelectors(i, m);
-        }
-
-        // Cliente/entidad: depende del modo
-        let clienteHtml = '';
-        if (!isDesglosado && isAbono) {
-            clienteHtml = buildCceEntitySelector(i, null, m);
-        } else if (!isDesglosado && m.tipo === 'ingreso') {
-            clienteHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
-                <option value="">Sin cliente</option>${clienteOpts}</select>`;
+            if (m.tipo === 'ingreso') {
+                clasificacionHtml += `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
+                    <option value="">Cliente (opcional)</option>${clienteOpts}</select>`;
+            }
         }
 
         tr.innerHTML = `
@@ -452,11 +445,10 @@ function rebuildMPTable() {
             </td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${sign}$${Number(m.monto).toLocaleString('es-CL')}</td>
             <td>${clasificacionHtml}</td>
-            <td>${clienteHtml}</td>
             <td>${matchHtml}</td>
             <td>${actionHtml}<br>${desgloseBtn}</td>`;
 
-        if (!isDesglosado) {
+        if (!isDesglosado && m.tipo === 'ingreso') {
             const selCli = tr.querySelector('select[onchange*="cliente_id"]');
             if (selCli && m.cliente_id) selCli.value = m.cliente_id;
         }
@@ -466,6 +458,7 @@ function rebuildMPTable() {
         if (isDesglosado) {
             m.desglose.forEach((d, j) => {
                 if (!d.sub_action) d.sub_action = 'importar';
+                if (!d.concepto_tipo) d.concepto_tipo = 'transferencia';
                 const isSubAbono = d.sub_action === 'abono_cc';
                 const subTr = document.createElement('tr');
                 subTr.style.cssText = isSubAbono
@@ -486,10 +479,11 @@ function rebuildMPTable() {
                         <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
-                    <td>${isSubAbono ? buildCceSelectors(i, j, d) : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
-                    <td>${isSubAbono ? buildCceEntitySelector(i, j, d) : (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                        <option value="">Sin cliente</option>${clienteOpts}</select>` : '')}</td>
-                    <td style="font-size:.7rem;color:var(--text-muted);"></td>
+                    <td>${isSubAbono
+                        ? buildCceSelectors(i, j, d) + buildCceEntitySelector(i, j, d)
+                        : buildEerrSelectors(`${i}_${j}`, d, true) + (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
+                            <option value="">Cliente (opcional)</option>${clienteOpts}</select>` : '')
+                    }</td>
                     <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
                 const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
                 if (selCli && d.cliente_id) selCli.value = d.cliente_id;
@@ -508,7 +502,7 @@ function rebuildMPTable() {
                 <td style="text-align:right;font-size:.72rem;font-weight:600;color:${balColor}">
                     ${diff === 0 ? 'Cuadrado' : 'Diferencia: $' + Number(Math.abs(diff)).toLocaleString('es-CL')}
                 </td>
-                <td colspan="4" style="font-size:.7rem;color:var(--text-muted);">
+                <td colspan="3" style="font-size:.7rem;color:var(--text-muted);">
                     Total desglose: $${Number(desgloseTotal).toLocaleString('es-CL')} de $${Number(m.monto).toLocaleString('es-CL')}
                 </td>`;
             tbody.appendChild(addTr);
@@ -606,6 +600,7 @@ function onCategoriaChangeSub(key, val) {
 
 // ---- Cuenta Corriente Externa: selectores tipo + entidad ----
 const cceTipos = [
+    { value: 'transferencia', label: 'Transferencia entre bancos' },
     { value: 'cliente', label: 'Cliente' },
     { value: 'socio', label: 'Socio' },
     { value: 'proveedor', label: 'Proveedor' },
@@ -639,18 +634,21 @@ function buildCceEntitySelector(i, j, d) {
         ? `mpPendingItems[${i}].desglose[${j}].cliente_id=this.value;mpPendingItems[${i}].desglose[${j}].concepto_entidad=this.value`
         : `mpPendingItems[${i}].cliente_id=this.value;mpPendingItems[${i}].concepto_entidad=this.value`;
 
+    if (tipoVal === 'transferencia') {
+        return `<span style="font-size:.68rem;color:var(--text-muted);display:block;margin-top:3px;">Movimiento entre cuentas propias</span>`;
+    }
     if (tipoVal === 'cliente') {
         const opts = mpClientes.map(c => `<option value="${c.id}"${String(c.id)===String(entidadVal)?' selected':''}>${escHtml(c.nombre)}</option>`).join('');
-        return `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="${handlerCli}">
+        return `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="${handlerCli}">
             <option value="">* Seleccionar cliente</option>${opts}</select>`;
     }
     if (tipoVal === 'socio') {
         const opts = mpSocios.map(s => `<option value="socio_${s.id}"${String('socio_'+s.id)===String(entidadVal)?' selected':''}>${escHtml(s.nombre)}</option>`).join('');
-        return `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="${handler}">
+        return `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="${handler}">
             <option value="">* Seleccionar socio</option>${opts}</select>`;
     }
     // proveedor u otro: input libre
-    return `<input type="text" class="form-select" style="font-size:.72rem;padding:3px 6px;width:100%;"
+    return `<input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;width:100%;margin-top:3px;"
         value="${escHtml(entidadVal)}" placeholder="Nombre..." onchange="${handler}">`;
 }
 
