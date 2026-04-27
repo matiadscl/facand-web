@@ -459,6 +459,7 @@ ul { list-style: none; }
   background: #0a0a0a;
   border-top: 1px solid rgba(255,255,255,0.06);
   padding: 56px 0 0;
+  text-align: left;
 }
 
 .footer__inner {
@@ -466,9 +467,12 @@ ul { list-style: none; }
   grid-template-columns: 1.5fr 1fr 1fr 1fr;
   gap: 40px;
   padding-bottom: 40px;
+  align-items: start;
 }
 
-.footer__brand {}
+.footer__brand {
+  text-align: left;
+}
 
 .footer__logo {
   height: 32px;
@@ -503,6 +507,10 @@ ul { list-style: none; }
 .footer__social a:hover {
   background: var(--primary);
   color: #000;
+}
+
+.footer__col {
+  text-align: left;
 }
 
 .footer__col h4 {
