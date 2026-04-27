@@ -460,15 +460,46 @@ function rebuildMPTable() {
                 if (!d.sub_action) d.sub_action = 'importar';
                 if (!d.concepto_tipo) d.concepto_tipo = 'transferencia';
                 const isSubAbono = d.sub_action === 'abono_cc';
+                const isSubConciliar = d.sub_action === 'conciliar';
+                const hasMatch = m.match_existente || m.match_factura;
                 const subTr = document.createElement('tr');
                 subTr.style.cssText = isSubAbono
                     ? 'background:rgba(56,189,248,.06);border-left:3px solid var(--accent);'
+                    : isSubConciliar
+                    ? 'background:rgba(56,189,248,.04);border-left:3px solid var(--success);'
                     : 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
+
+                // Selector de acción por sub-item
+                const subActionStyle = isSubAbono ? 'border-color:var(--accent);color:var(--accent);font-weight:600;'
+                    : isSubConciliar ? 'border-color:var(--success);color:var(--success);font-weight:600;' : '';
+
+                // Clasificación según sub_action
+                let subClasifHtml;
+                if (isSubConciliar) {
+                    let matchInfo = '';
+                    if (m.match_existente) {
+                        const ex = m.match_existente;
+                        matchInfo = `<div style="font-size:.7rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--accent);margin-top:3px;">
+                            <strong style="color:var(--accent)">Match</strong> #${ex.id}: ${escHtml(ex.descripcion.substring(0,30))}<br>${ex.fecha} · ${escHtml(ex.categoria)}</div>`;
+                    } else if (m.match_factura) {
+                        const fac = m.match_factura;
+                        matchInfo = `<div style="font-size:.7rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--success);margin-top:3px;">
+                            <strong style="color:var(--success)">Factura ${escHtml(fac.numero)}</strong><br>${escHtml(fac.cliente || '')} · $${Number(fac.total).toLocaleString('es-CL')}</div>`;
+                    }
+                    subClasifHtml = `<span style="font-size:.7rem;color:var(--success);font-weight:600;">Conciliar con movimiento existente</span>${matchInfo}`;
+                } else if (isSubAbono) {
+                    subClasifHtml = buildCceSelectors(i, j, d) + buildCceEntitySelector(i, j, d);
+                } else {
+                    subClasifHtml = buildEerrSelectors(`${i}_${j}`, d, true) + (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
+                        <option value="">Cliente (opcional)</option>${clienteOpts}</select>` : '');
+                }
+
                 subTr.innerHTML = `
                     <td>
-                        <select class="form-select" style="font-size:.7rem;padding:3px 5px;${isSubAbono ? 'border-color:var(--accent);color:var(--accent);font-weight:600;' : ''}" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
+                        <select class="form-select" style="font-size:.7rem;padding:3px 5px;${subActionStyle}" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
                             <option value="importar"${d.sub_action==='importar'?' selected':''}>EERR</option>
                             ${m.tipo==='ingreso' ? `<option value="abono_cc"${d.sub_action==='abono_cc'?' selected':''}>Cta corriente ext.</option>` : ''}
+                            ${hasMatch ? `<option value="conciliar"${d.sub_action==='conciliar'?' selected':''}>Conciliar</option>` : ''}
                         </select>
                     </td>
                     <td style="font-size:.75rem;">
@@ -479,11 +510,7 @@ function rebuildMPTable() {
                         <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
-                    <td>${isSubAbono
-                        ? buildCceSelectors(i, j, d) + buildCceEntitySelector(i, j, d)
-                        : buildEerrSelectors(`${i}_${j}`, d, true) + (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                            <option value="">Cliente (opcional)</option>${clienteOpts}</select>` : '')
-                    }</td>
+                    <td>${subClasifHtml}</td>
                     <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
                 const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
                 if (selCli && d.cliente_id) selCli.value = d.cliente_id;
@@ -770,9 +797,12 @@ async function confirmMPImport() {
                 descripcion: d.descripcion, monto: parseInt(d.monto) || 0,
                 seccion: d.seccion || '', categoria: d.categoria || '', subcategoria: d.subcategoria || '',
                 cliente_id: d.cliente_id || '',
-                concepto_tipo: d.concepto_tipo || 'cliente',
+                concepto_tipo: d.concepto_tipo || 'transferencia',
                 concepto_entidad: d.concepto_entidad || '',
             }));
+            // Pasar match info del padre para sub-items que concilian
+            base.match_id = m.match_id || 0;
+            base.match_factura_id = m.match_factura_id || 0;
         }
         return base;
     });

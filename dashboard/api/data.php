@@ -1127,7 +1127,7 @@ switch ($action) {
             $desglose = $item['desglose'] ?? null;
             $has_desglose = is_array($desglose) && count($desglose) > 0;
 
-            if ($has_desglose && in_array($action_type, ['importar', 'abono_cc'])) {
+            if ($has_desglose && in_array($action_type, ['importar', 'abono_cc', 'conciliar'])) {
                 $tipo = $item['tipo'] ?? 'gasto';
                 $fecha = $item['fecha'] ?? date('Y-m-d');
                 $method = $item['metodo'] ?? '';
@@ -1140,7 +1140,21 @@ switch ($action) {
                     $d_cliente = !empty($d['cliente_id']) ? (int)$d['cliente_id'] : null;
                     $sub_action = $d['sub_action'] ?? $action_type;
 
-                    if ($sub_action === 'abono_cc') {
+                    if ($sub_action === 'conciliar') {
+                        // Conciliar sub-item con match existente o factura
+                        $match_id = (int)($item['match_id'] ?? 0);
+                        $fac_id = (int)($item['match_factura_id'] ?? 0);
+                        if ($match_id > 0) {
+                            $existing = query_one("SELECT notas FROM finanzas WHERE id = ?", [$match_id]);
+                            $new_notes = trim(($existing['notas'] ?? '') . " | conciliado_mp:$mp_id|desglose:" . ($di+1));
+                            db_execute("UPDATE finanzas SET notas = ?, origen = CASE WHEN origen = 'manual' THEN 'conciliado' ELSE origen END WHERE id = ?", [$new_notes, $match_id]);
+                            $reconciled++;
+                        } elseif ($fac_id > 0) {
+                            db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, factura_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, "Ingresos", "Suscripciones", "Custom", ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                                [$tipo, $d_desc, $d_monto, $d_cliente, $fac_id, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|conciliado_factura:$fac_id"]);
+                            $reconciled++;
+                        }
+                    } elseif ($sub_action === 'abono_cc') {
                         $cce_tipo = $d['concepto_tipo'] ?? 'cliente';
                         $cce_entidad = $d['concepto_entidad'] ?? '';
                         $cce_nombre = $cce_entidad;
