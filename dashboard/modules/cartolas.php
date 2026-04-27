@@ -547,25 +547,51 @@ function updateDesgloseAmount(i, j, val) {
 }
 
 // Override para selectores dentro de desglose (usa key compuesto "i_j")
+function onSeccionChange(key, val) {
+    mpPendingItems[key].seccion = val;
+    mpPendingItems[key].categoria = '';
+    mpPendingItems[key].subcategoria = '';
+    rebuildMPTable();
+}
+
+function onCategoriaChange(key, val) {
+    if (val === '__nueva__') {
+        const nombre = prompt('Nombre de la nueva categoría:');
+        if (!nombre) { rebuildMPTable(); return; }
+        mpPendingItems[key].categoria = nombre;
+        mpPendingItems[key].subcategoria = '';
+        mpCategorias.push({ seccion: mpPendingItems[key].seccion, categoria: nombre, subcategoria: '', tipo: mpPendingItems[key].tipo, orden: 999 });
+        rebuildMPTable();
+    } else {
+        mpPendingItems[key].categoria = val;
+        mpPendingItems[key].subcategoria = '';
+        rebuildMPTable();
+    }
+}
+
 function onSeccionChangeSub(key, val) {
     const [i, j] = key.split('_').map(Number);
     mpPendingItems[i].desglose[j].seccion = val;
     mpPendingItems[i].desglose[j].categoria = '';
     mpPendingItems[i].desglose[j].subcategoria = '';
-    const cats = getCategoriasForSeccion(val);
-    const catSel = document.querySelector(`select[data-role="categoria"][data-idx="${key}"]`);
-    if (catSel) catSel.innerHTML = '<option value="">Categoría</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
-    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${key}"]`);
-    if (subSel) subSel.innerHTML = '<option value="">Subcategoría</option>';
+    rebuildMPTable();
 }
 
 function onCategoriaChangeSub(key, val) {
     const [i, j] = key.split('_').map(Number);
-    mpPendingItems[i].desglose[j].categoria = val;
-    mpPendingItems[i].desglose[j].subcategoria = '';
-    const subs = getSubcatsForCat(mpPendingItems[i].desglose[j].seccion, val);
-    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${key}"]`);
-    if (subSel) subSel.innerHTML = '<option value="">Subcategoría</option>' + subs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    if (val === '__nueva__') {
+        const nombre = prompt('Nombre de la nueva categoría:');
+        if (!nombre) { rebuildMPTable(); return; }
+        mpPendingItems[i].desglose[j].categoria = nombre;
+        mpPendingItems[i].desglose[j].subcategoria = '';
+        const sec = mpPendingItems[i].desglose[j].seccion;
+        mpCategorias.push({ seccion: sec, categoria: nombre, subcategoria: '', tipo: mpPendingItems[i].tipo, orden: 999 });
+        rebuildMPTable();
+    } else {
+        mpPendingItems[i].desglose[j].categoria = val;
+        mpPendingItems[i].desglose[j].subcategoria = '';
+        rebuildMPTable();
+    }
 }
 
 function buildEerrSelectors(key, m, isSub) {
@@ -575,22 +601,61 @@ function buildEerrSelectors(key, m, isSub) {
     const cats = m.seccion ? getCategoriasForSeccion(m.seccion) : [];
     const catOpts = cats.map(c => `<option value="${escHtml(c)}"${c===m.categoria?' selected':''}>${escHtml(c)}</option>`).join('');
     const subs = (m.seccion && m.categoria) ? getSubcatsForCat(m.seccion, m.categoria) : [];
+    const isCustomCat = m.categoria && !cats.includes(m.categoria);
+    const isCustomSub = m.subcategoria && !subs.includes(m.subcategoria);
     const subOpts = subs.map(s => `<option value="${escHtml(s)}"${s===m.subcategoria?' selected':''}>${escHtml(s)}</option>`).join('');
 
     const secHandler = isSub ? `onSeccionChangeSub('${key}',this.value)` : `onSeccionChange(${key},this.value)`;
     const catHandler = isSub ? `onCategoriaChangeSub('${key}',this.value)` : `onCategoriaChange(${key},this.value)`;
     const subHandler = isSub
-        ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria=this.value`
-        : `mpPendingItems[${key}].subcategoria=this.value`;
+        ? `onSubcategoriaChange('${key}',this.value,true)`
+        : `onSubcategoriaChange(${key},this.value,false)`;
+
+    // Si tiene valor custom, mostrar input en vez de select
+    const catHtml = isCustomCat
+        ? `<input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;" value="${escHtml(m.categoria)}" data-role="categoria" data-idx="${key}"
+            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].categoria=this.value` : `mpPendingItems[${key}].categoria=this.value`}">`
+        : `<select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${key}" onchange="${catHandler}">
+            <option value="">Categoría</option>${catOpts}<option value="__nueva__">+ Crear nueva</option></select>`;
+
+    const subHtml = isCustomSub
+        ? `<input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;" value="${escHtml(m.subcategoria)}" data-role="subcategoria" data-idx="${key}"
+            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria=this.value` : `mpPendingItems[${key}].subcategoria=this.value`}">`
+        : `<select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${key}" onchange="${subHandler}">
+            <option value="">Subcategoría</option>${subOpts}${subs.length > 0 ? '<option value="__nueva__">+ Crear nueva</option>' : ''}</select>`;
 
     return `<div style="display:flex;flex-direction:column;gap:3px;">
         <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="seccion" data-idx="${key}" onchange="${secHandler}">
             <option value="">Sección</option>${secOpts}</select>
-        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${key}" onchange="${catHandler}">
-            <option value="">Categoría</option>${catOpts}</select>
-        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${key}" onchange="${subHandler}">
-            <option value="">Subcategoría</option>${subOpts}</select>
+        ${catHtml}
+        ${subHtml}
     </div>`;
+}
+
+function onSubcategoriaChange(key, val, isSub) {
+    if (val === '__nueva__') {
+        const nombre = prompt('Nombre de la nueva subcategoría:');
+        if (!nombre) { rebuildMPTable(); return; }
+        if (isSub) {
+            const [i, j] = String(key).split('_').map(Number);
+            mpPendingItems[i].desglose[j].subcategoria = nombre;
+        } else {
+            mpPendingItems[key].subcategoria = nombre;
+        }
+        // Agregar a mpCategorias para que aparezca en futuros selects
+        const item = isSub ? mpPendingItems[String(key).split('_')[0]].desglose[String(key).split('_')[1]] : mpPendingItems[key];
+        if (item.seccion && item.categoria) {
+            mpCategorias.push({ seccion: item.seccion, categoria: item.categoria, subcategoria: nombre, tipo: item.tipo || 'gasto', orden: 999 });
+        }
+        rebuildMPTable();
+    } else {
+        if (isSub) {
+            const [i, j] = String(key).split('_').map(Number);
+            mpPendingItems[i].desglose[j].subcategoria = val;
+        } else {
+            mpPendingItems[key].subcategoria = val;
+        }
+    }
 }
 
 async function confirmMPImport() {

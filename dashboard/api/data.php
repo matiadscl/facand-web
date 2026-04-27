@@ -1044,6 +1044,15 @@ switch ($action) {
         $items = json_decode($items_json, true);
         if (!$items || !is_array($items)) fail('No hay movimientos para procesar');
 
+        // Auto-crear categorías nuevas en categorias_eerr
+        $ensure_cat = function($seccion, $categoria, $subcategoria, $tipo) {
+            if (!$seccion || !$categoria || !$subcategoria) return;
+            $exists = query_scalar("SELECT COUNT(*) FROM categorias_eerr WHERE seccion = ? AND categoria = ? AND subcategoria = ?", [$seccion, $categoria, $subcategoria]);
+            if (!$exists) {
+                db_execute("INSERT OR IGNORE INTO categorias_eerr (seccion, categoria, subcategoria, tipo, orden) VALUES (?, ?, ?, ?, 999)", [$seccion, $categoria, $subcategoria, $tipo]);
+            }
+        };
+
         $imported = 0;
         $reconciled = 0;
         $skipped = 0;
@@ -1083,6 +1092,7 @@ switch ($action) {
                             $reconciled++;
                         } else {
                             // Sub-item va al EERR
+                            $ensure_cat($d['seccion'] ?? '', $d['categoria'] ?? '', $d['subcategoria'] ?? '', $tipo);
                             db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
                                 [$tipo, $d['seccion'] ?? '', $d['categoria'] ?? 'general', $d['subcategoria'] ?? '', $d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|method:$method|op:$op_type"]);
                             $imported++;
@@ -1096,6 +1106,7 @@ switch ($action) {
                     $monto = (int)($item['monto'] ?? 0);
                     $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
 
+                    $ensure_cat($seccion, $categoria, $subcategoria, $tipo);
                     db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
                         [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
                     $imported++;
