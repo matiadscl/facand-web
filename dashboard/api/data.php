@@ -417,6 +417,42 @@ switch ($action) {
         respond($interactions);
         break;
 
+    // ---- STACK DE CLIENTES ----
+    case 'get_stack':
+        $cliente_id = input_int('cliente_id');
+        if (!$cliente_id) fail('Cliente obligatorio');
+        $items = query_all("SELECT si.id, si.categoria, si.nombre, si.orden,
+            COALESCE(sc.completado, 0) as completado, COALESCE(sc.notas, '') as notas
+            FROM stack_items si
+            LEFT JOIN stack_cliente sc ON sc.item_id = si.id AND sc.cliente_id = ?
+            WHERE si.activo = 1 ORDER BY si.orden", [$cliente_id]);
+        respond($items ?: []);
+        break;
+
+    case 'toggle_stack_item':
+        if (!can_edit($user_id, 'stack') && !can_edit($user_id, 'crm')) fail('Sin permiso');
+        $cliente_id = input_int('cliente_id');
+        $item_id = input_int('item_id');
+        $completado = input_int('completado');
+        if (!$cliente_id || !$item_id) fail('Cliente e item obligatorios');
+        db_execute("INSERT INTO stack_cliente (cliente_id, item_id, completado, updated_at) VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(cliente_id, item_id) DO UPDATE SET completado = ?, updated_at = datetime('now')",
+            [$cliente_id, $item_id, $completado, $completado]);
+        respond();
+        break;
+
+    case 'save_stack_nota':
+        if (!can_edit($user_id, 'stack') && !can_edit($user_id, 'crm')) fail('Sin permiso');
+        $cliente_id = input_int('cliente_id');
+        $item_id = input_int('item_id');
+        $notas = input('notas');
+        if (!$cliente_id || !$item_id) fail('Cliente e item obligatorios');
+        db_execute("INSERT INTO stack_cliente (cliente_id, item_id, notas, updated_at) VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(cliente_id, item_id) DO UPDATE SET notas = ?, updated_at = datetime('now')",
+            [$cliente_id, $item_id, $notas, $notas]);
+        respond();
+        break;
+
     case 'create_interaction':
         if (!can_edit($user_id, 'crm')) fail('Sin permiso');
         $cliente_id = input_int('cliente_id');
