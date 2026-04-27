@@ -1140,11 +1140,19 @@ switch ($action) {
                     $d_cliente = !empty($d['cliente_id']) ? (int)$d['cliente_id'] : null;
                     $sub_action = $d['sub_action'] ?? $action_type;
 
-                    if ($sub_action === 'abono_cc' && $d_cliente) {
-                        db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
-                            [$d_cliente, "Cta ext MP: $d_desc", $d_monto, $fecha]);
+                    if ($sub_action === 'abono_cc') {
+                        $cce_tipo = $d['concepto_tipo'] ?? 'cliente';
+                        $cce_entidad = $d['concepto_entidad'] ?? '';
+                        $cce_nombre = $cce_entidad;
+                        // Para clientes, resolver nombre
+                        if ($cce_tipo === 'cliente' && $d_cliente) {
+                            $cn = query_one("SELECT nombre FROM clientes WHERE id = ?", [$d_cliente]);
+                            $cce_nombre = $cn ? $cn['nombre'] : $cce_entidad;
+                        }
+                        db_execute('INSERT INTO cuenta_corriente (cliente_id, concepto_tipo, concepto_nombre, tipo, descripcion, monto, fecha) VALUES (?, ?, ?, "pago", ?, ?, ?)',
+                            [$d_cliente, $cce_tipo, $cce_nombre, "Cta ext MP: $d_desc", $d_monto, $fecha]);
                         db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Cuenta corriente externa", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                            [$d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|abono_cc|method:$method"]);
+                            [$d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|abono_cc|$cce_tipo:$cce_nombre|method:$method"]);
                         $reconciled++;
                     } else {
                         $ensure_cat($d['seccion'] ?? '', $d['categoria'] ?? '', $d['subcategoria'] ?? '', $tipo);
@@ -1173,17 +1181,24 @@ switch ($action) {
 
             } elseif ($action_type === 'abono_cc') {
                 // Sin desglose: todo a cuenta corriente
+                $cce_tipo = $item['concepto_tipo'] ?? 'cliente';
+                $cce_entidad = $item['concepto_entidad'] ?? '';
                 $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
-                if (!$cliente_id) { $skipped++; continue; }
-                $desc = $item['descripcion'] ?? 'Abono Mercado Pago';
+                $cce_nombre = $cce_entidad;
+                if ($cce_tipo === 'cliente' && $cliente_id) {
+                    $cn = query_one("SELECT nombre FROM clientes WHERE id = ?", [$cliente_id]);
+                    $cce_nombre = $cn ? $cn['nombre'] : $cce_entidad;
+                }
+                if (!$cce_nombre && !$cliente_id) { $skipped++; continue; }
+                $desc = $item['descripcion'] ?? 'Movimiento Mercado Pago';
                 $monto = (int)($item['monto'] ?? 0);
                 $fecha = $item['fecha'] ?? date('Y-m-d');
                 $method = $item['metodo'] ?? '';
 
-                db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
-                    [$cliente_id, "Cta ext MP: $desc", $monto, $fecha]);
+                db_execute('INSERT INTO cuenta_corriente (cliente_id, concepto_tipo, concepto_nombre, tipo, descripcion, monto, fecha) VALUES (?, ?, ?, "pago", ?, ?, ?)',
+                    [$cliente_id, $cce_tipo, $cce_nombre, "Cta ext MP: $desc", $monto, $fecha]);
                 db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Cuenta corriente externa", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                    [$desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|abono_cc|method:$method"]);
+                    [$desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|abono_cc|$cce_tipo:$cce_nombre|method:$method"]);
                 $reconciled++;
 
             } elseif ($action_type === 'conciliar') {

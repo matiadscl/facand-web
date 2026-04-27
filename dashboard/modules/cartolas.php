@@ -305,6 +305,7 @@ function clearFile(){document.getElementById('fileInput').value='';document.getE
 
 // ---- Mercado Pago ----
 const mpClientes = <?= json_encode($clientes_mp) ?>;
+const mpSocios = <?= json_encode(query_all('SELECT id, nombre FROM equipo ORDER BY id') ?: []) ?>;
 let mpPendingItems = [];
 let mpCategorias = []; // se llena desde la API
 
@@ -423,20 +424,23 @@ function rebuildMPTable() {
 
         // Columna clasificación: depende del modo
         let clasificacionHtml;
-        if (isAbono) {
-            clasificacionHtml = '<span style="font-size:.72rem;color:var(--accent);font-weight:600;">Va a cuenta corriente del cliente (no afecta EERR)</span>';
+        if (isAbono && !isDesglosado) {
+            // Inicializar concepto_tipo si no existe
+            if (!m.concepto_tipo) m.concepto_tipo = 'cliente';
+            clasificacionHtml = buildCceSelectors(i, null, m);
         } else if (isDesglosado) {
             clasificacionHtml = '<span style="font-size:.72rem;color:var(--text-muted)">Ver desglose abajo</span>';
         } else {
             clasificacionHtml = buildEerrSelectors(i, m);
         }
 
-        // Cliente: solo para ingresos (egresos son gastos de Facand, no de un cliente)
+        // Cliente/entidad: depende del modo
         let clienteHtml = '';
-        if (!isDesglosado && m.tipo === 'ingreso') {
-            const clienteRequired = isAbono ? ' style="font-size:.75rem;padding:4px 6px;border-color:var(--accent);"' : ' style="font-size:.75rem;padding:4px 6px;"';
-            clienteHtml = `<select class="form-select"${clienteRequired} onchange="mpPendingItems[${i}].cliente_id=this.value">
-                <option value="">${isAbono ? '* Seleccionar cliente' : 'Sin cliente'}</option>${clienteOpts}</select>`;
+        if (!isDesglosado && isAbono) {
+            clienteHtml = buildCceEntitySelector(i, null, m);
+        } else if (!isDesglosado && m.tipo === 'ingreso') {
+            clienteHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
+                <option value="">Sin cliente</option>${clienteOpts}</select>`;
         }
 
         tr.innerHTML = `
@@ -482,9 +486,9 @@ function rebuildMPTable() {
                         <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
-                    <td>${isSubAbono ? '<span style="font-size:.7rem;color:var(--accent);">Cuenta corriente externa</span>' : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
-                    <td><select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                        <option value="">${isSubAbono ? '* Cliente' : 'Sin cliente'}</option>${clienteOpts}</select></td>
+                    <td>${isSubAbono ? buildCceSelectors(i, j, d) : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
+                    <td>${isSubAbono ? buildCceEntitySelector(i, j, d) : `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
+                        <option value="">Sin cliente</option>${clienteOpts}</select>`}</td>
                     <td style="font-size:.7rem;color:var(--text-muted);"></td>
                     <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
                 const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
@@ -600,6 +604,56 @@ function onCategoriaChangeSub(key, val) {
     }
 }
 
+// ---- Cuenta Corriente Externa: selectores tipo + entidad ----
+const cceTipos = [
+    { value: 'cliente', label: 'Cliente' },
+    { value: 'socio', label: 'Socio' },
+    { value: 'proveedor', label: 'Proveedor' },
+    { value: 'otro', label: 'Otro' },
+];
+
+function buildCceSelectors(i, j, d) {
+    const isSub = j !== null;
+    const tipoVal = d.concepto_tipo || 'cliente';
+    const tipoOpts = cceTipos.map(t => `<option value="${t.value}"${t.value===tipoVal?' selected':''}>${t.label}</option>`).join('');
+    const handler = isSub
+        ? `mpPendingItems[${i}].desglose[${j}].concepto_tipo=this.value;rebuildMPTable()`
+        : `mpPendingItems[${i}].concepto_tipo=this.value;rebuildMPTable()`;
+
+    return `<div style="display:flex;flex-direction:column;gap:3px;">
+        <span style="font-size:.65rem;color:var(--accent);font-weight:600;">Cta corriente externa</span>
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" onchange="${handler}">
+            ${tipoOpts}</select>
+    </div>`;
+}
+
+function buildCceEntitySelector(i, j, d) {
+    const isSub = j !== null;
+    const tipoVal = d.concepto_tipo || 'cliente';
+    const entidadVal = d.concepto_entidad || d.cliente_id || '';
+
+    const handler = isSub
+        ? `mpPendingItems[${i}].desglose[${j}].concepto_entidad=this.value`
+        : `mpPendingItems[${i}].concepto_entidad=this.value`;
+    const handlerCli = isSub
+        ? `mpPendingItems[${i}].desglose[${j}].cliente_id=this.value;mpPendingItems[${i}].desglose[${j}].concepto_entidad=this.value`
+        : `mpPendingItems[${i}].cliente_id=this.value;mpPendingItems[${i}].concepto_entidad=this.value`;
+
+    if (tipoVal === 'cliente') {
+        const opts = mpClientes.map(c => `<option value="${c.id}"${String(c.id)===String(entidadVal)?' selected':''}>${escHtml(c.nombre)}</option>`).join('');
+        return `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="${handlerCli}">
+            <option value="">* Seleccionar cliente</option>${opts}</select>`;
+    }
+    if (tipoVal === 'socio') {
+        const opts = mpSocios.map(s => `<option value="socio_${s.id}"${String('socio_'+s.id)===String(entidadVal)?' selected':''}>${escHtml(s.nombre)}</option>`).join('');
+        return `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="${handler}">
+            <option value="">* Seleccionar socio</option>${opts}</select>`;
+    }
+    // proveedor u otro: input libre
+    return `<input type="text" class="form-select" style="font-size:.72rem;padding:3px 6px;width:100%;"
+        value="${escHtml(entidadVal)}" placeholder="Nombre..." onchange="${handler}">`;
+}
+
 function buildEerrSelectors(key, m, isSub) {
     const tipo = isSub ? (mpPendingItems[String(key).split('_')[0]]?.tipo || 'gasto') : m.tipo;
     const secciones = getSeccionesForTipo(tipo);
@@ -704,6 +758,7 @@ async function confirmMPImport() {
             metodo: m.metodo, op_type: m.op_type,
             seccion: m.seccion || '', categoria: m.categoria || '', subcategoria: m.subcategoria || '',
             cliente_id: m.cliente_id || '',
+            concepto_tipo: m.concepto_tipo || 'cliente', concepto_entidad: m.concepto_entidad || '',
             match_id: m.match_id || 0, match_factura_id: m.match_factura_id || 0,
         };
         if (m.desglose && m.desglose.length > 0) {
@@ -712,6 +767,8 @@ async function confirmMPImport() {
                 descripcion: d.descripcion, monto: parseInt(d.monto) || 0,
                 seccion: d.seccion || '', categoria: d.categoria || '', subcategoria: d.subcategoria || '',
                 cliente_id: d.cliente_id || '',
+                concepto_tipo: d.concepto_tipo || 'cliente',
+                concepto_entidad: d.concepto_entidad || '',
             }));
         }
         return base;
