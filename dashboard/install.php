@@ -219,12 +219,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
         CREATE TABLE finanzas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tipo TEXT NOT NULL CHECK(tipo IN ('ingreso','gasto')),
+            seccion TEXT NOT NULL DEFAULT '',
             categoria TEXT NOT NULL DEFAULT 'general',
+            subcategoria TEXT DEFAULT '',
             descripcion TEXT NOT NULL,
             monto INTEGER NOT NULL DEFAULT 0,
             cliente_id INTEGER,
             factura_id INTEGER,
             fecha TEXT DEFAULT (date('now')),
+            fecha_contable TEXT,
+            origen TEXT DEFAULT 'manual',
+            notas TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL,
             FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE SET NULL
@@ -235,6 +240,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
             nombre TEXT UNIQUE NOT NULL,
             tipo TEXT NOT NULL CHECK(tipo IN ('ingreso','gasto','ambos')),
             activa INTEGER NOT NULL DEFAULT 1
+        );
+
+        -- Categorías EERR — 4 niveles: sección > categoría > subcategoría > detalle (libre)
+        CREATE TABLE categorias_eerr (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seccion TEXT NOT NULL,
+            categoria TEXT NOT NULL,
+            subcategoria TEXT NOT NULL,
+            tipo TEXT NOT NULL CHECK(tipo IN ('ingreso','gasto')),
+            orden INTEGER NOT NULL DEFAULT 0,
+            activa INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(seccion, categoria, subcategoria)
         );
 
         -- ============================================================
@@ -320,6 +338,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 2) {
             ('Servicios básicos', 'gasto'),
             ('Impuestos', 'gasto'),
             ('Otros gastos', 'gasto');
+
+        -- Categorías EERR (4 niveles)
+        INSERT INTO categorias_eerr (seccion, categoria, subcategoria, tipo, orden) VALUES
+            -- INGRESOS > Suscripciones
+            ('Ingresos','Suscripciones','Plan Meta Ads','ingreso',10),
+            ('Ingresos','Suscripciones','Plan Google Ads','ingreso',11),
+            ('Ingresos','Suscripciones','Plan Full Ads','ingreso',12),
+            ('Ingresos','Suscripciones','Plan Full Ads + SEO','ingreso',13),
+            ('Ingresos','Suscripciones','Plan Starter','ingreso',14),
+            ('Ingresos','Suscripciones','Plan Growth','ingreso',15),
+            ('Ingresos','Suscripciones','Plan Scale','ingreso',16),
+            ('Ingresos','Suscripciones','Plataforma Core','ingreso',17),
+            ('Ingresos','Suscripciones','CRM + Automatizaciones','ingreso',18),
+            ('Ingresos','Suscripciones','Portal de Clientes','ingreso',19),
+            ('Ingresos','Suscripciones','IA + Integraciones','ingreso',20),
+            ('Ingresos','Suscripciones','Custom','ingreso',21),
+            -- INGRESOS > Implementación
+            ('Ingresos','Implementación','Landing Page','ingreso',30),
+            ('Ingresos','Implementación','Sitio Corporativo','ingreso',31),
+            ('Ingresos','Implementación','E-Commerce','ingreso',32),
+            ('Ingresos','Implementación','Configuración plataformas','ingreso',33),
+            ('Ingresos','Implementación','Desarrollo a medida','ingreso',34),
+            ('Ingresos','Implementación','Branding','ingreso',35),
+            -- INGRESOS > Adicionales
+            ('Ingresos','Adicionales','Tokens y consumo API','ingreso',40),
+            ('Ingresos','Adicionales','Extras puntuales','ingreso',41),
+            -- INGRESOS > Otros ingresos
+            ('Ingresos','Otros ingresos','Comisiones','ingreso',50),
+            ('Ingresos','Otros ingresos','Reembolsos','ingreso',51),
+            -- COSTO DE VENTAS > Inversión publicitaria
+            ('Costo de Ventas','Inversión publicitaria','Google Ads','gasto',100),
+            ('Costo de Ventas','Inversión publicitaria','Meta Ads','gasto',101),
+            ('Costo de Ventas','Inversión publicitaria','TikTok Ads','gasto',102),
+            ('Costo de Ventas','Inversión publicitaria','Otras plataformas','gasto',103),
+            -- COSTO DE VENTAS > Herramientas de producción
+            ('Costo de Ventas','Herramientas de producción','Diseño','gasto',110),
+            ('Costo de Ventas','Herramientas de producción','Automatización','gasto',111),
+            ('Costo de Ventas','Herramientas de producción','IA','gasto',112),
+            -- COSTO DE VENTAS > Subcontrataciones
+            ('Costo de Ventas','Subcontrataciones','Freelancers','gasto',120),
+            ('Costo de Ventas','Subcontrataciones','Servicios externos','gasto',121),
+            -- GAV > Personal
+            ('GAV','Personal','Sueldos','gasto',200),
+            ('GAV','Personal','Honorarios socios','gasto',201),
+            ('GAV','Personal','Capacitación','gasto',202),
+            -- GAV > Infraestructura
+            ('GAV','Infraestructura','Hosting y dominios','gasto',210),
+            ('GAV','Infraestructura','Software operativo','gasto',211),
+            ('GAV','Infraestructura','Telefonía y comunicaciones','gasto',212),
+            -- GAV > Oficina
+            ('GAV','Oficina','Arriendo','gasto',220),
+            ('GAV','Oficina','Servicios básicos','gasto',221),
+            ('GAV','Oficina','Equipamiento','gasto',222),
+            -- GAV > Marketing propio
+            ('GAV','Marketing propio','Publicidad Facand','gasto',230),
+            ('GAV','Marketing propio','Eventos y networking','gasto',231),
+            -- GAV > Otros GAV
+            ('GAV','Otros GAV','Seguros','gasto',240),
+            ('GAV','Otros GAV','Asesoría contable/legal','gasto',241),
+            ('GAV','Otros GAV','Viáticos','gasto',242),
+            -- NO OPERACIONALES > Impuestos
+            ('No Operacionales','Impuestos','IVA','gasto',300),
+            ('No Operacionales','Impuestos','PPM','gasto',301),
+            ('No Operacionales','Impuestos','Renta','gasto',302),
+            -- NO OPERACIONALES > Financieros
+            ('No Operacionales','Financieros','Comisiones bancarias','gasto',310),
+            ('No Operacionales','Financieros','Comisiones MP','gasto',311),
+            ('No Operacionales','Financieros','Intereses','gasto',312),
+            -- NO OPERACIONALES > Otros
+            ('No Operacionales','Otros','Multas','gasto',320),
+            ('No Operacionales','Otros','Extraordinarios','gasto',321);
 
         -- ============================================================
         -- TRIGGERS DE AUTOMATIZACIÓN

@@ -9,7 +9,6 @@
 $categorias = query_all('SELECT DISTINCT categoria FROM finanzas WHERE categoria != "" ORDER BY categoria') ?: [];
 $reglas = query_all('SELECT * FROM reglas_categorizacion ORDER BY tipo, patron') ?: [];
 $historial = query_all('SELECT DISTINCT descripcion, categoria, subcategoria FROM finanzas WHERE categoria != "" AND categoria != "general" AND origen = "banco" ORDER BY id DESC LIMIT 500') ?: [];
-$cats_finanzas = query_all('SELECT nombre, tipo FROM categorias_finanzas WHERE activa = 1 ORDER BY tipo, nombre') ?: [];
 $clientes_mp = query_all('SELECT id, nombre FROM clientes ORDER BY nombre') ?: [];
 
 $ultima_sync_mp = query_scalar("SELECT MAX(created_at) FROM finanzas WHERE origen = 'mercadopago'");
@@ -47,13 +46,13 @@ $total_mp = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadop
         <div style="overflow-x:auto;">
             <table>
                 <thead><tr>
-                    <th style="width:90px">Fecha</th>
+                    <th style="width:85px">Fecha</th>
                     <th>Descripción</th>
-                    <th style="text-align:right;width:110px">Monto</th>
-                    <th style="width:170px">Categoría</th>
-                    <th style="width:150px">Cliente</th>
-                    <th style="width:200px">Conciliación</th>
-                    <th style="width:100px">Acción</th>
+                    <th style="text-align:right;width:100px">Monto</th>
+                    <th style="width:200px">Clasificación EERR</th>
+                    <th style="width:130px">Cliente</th>
+                    <th style="width:190px">Conciliación</th>
+                    <th style="width:90px">Acción</th>
                 </tr></thead>
                 <tbody id="mpPreviewBody"></tbody>
             </table>
@@ -305,10 +304,9 @@ function cancelImport(){pendingMov=[];document.getElementById('previewSection').
 function clearFile(){document.getElementById('fileInput').value='';document.getElementById('fileInfo').style.display='none';document.getElementById('processingMsg').style.display='none';}
 
 // ---- Mercado Pago ----
-const mpCatsIngreso = <?= json_encode(array_column(array_filter($cats_finanzas, fn($c) => in_array($c['tipo'], ['ingreso','ambos'])), 'nombre')) ?>;
-const mpCatsGasto = <?= json_encode(array_column(array_filter($cats_finanzas, fn($c) => in_array($c['tipo'], ['gasto','ambos'])), 'nombre')) ?>;
 const mpClientes = <?= json_encode($clientes_mp) ?>;
 let mpPendingItems = [];
+let mpCategorias = []; // se llena desde la API
 
 async function previewMercadoPago() {
     const btn = document.getElementById('btnImportMP');
@@ -325,6 +323,7 @@ async function previewMercadoPago() {
         const res = await raw.json();
         if (res && res.ok) {
             const movs = res.data.movements;
+            mpCategorias = res.data.categorias || [];
             if (movs.length === 0) {
                 status.innerHTML = '<span style="color:var(--success)">Todo sincronizado, no hay movimientos nuevos.</span>';
             } else {
@@ -341,11 +340,59 @@ async function previewMercadoPago() {
     btn.textContent = 'Importar desde Mercado Pago';
 }
 
+// Helpers para selectores EERR encadenados
+function getSeccionesForTipo(tipo) {
+    const secs = [...new Set(mpCategorias.filter(c => c.tipo === tipo).map(c => c.seccion))];
+    return secs;
+}
+function getCategoriasForSeccion(seccion) {
+    return [...new Set(mpCategorias.filter(c => c.seccion === seccion).map(c => c.categoria))];
+}
+function getSubcatsForCat(seccion, categoria) {
+    return mpCategorias.filter(c => c.seccion === seccion && c.categoria === categoria).map(c => c.subcategoria);
+}
+
+function buildEerrSelectors(i, m) {
+    const secciones = getSeccionesForTipo(m.tipo);
+    const secOpts = secciones.map(s => `<option value="${escHtml(s)}"${s===m.seccion?' selected':''}>${escHtml(s)}</option>`).join('');
+    const cats = m.seccion ? getCategoriasForSeccion(m.seccion) : [];
+    const catOpts = cats.map(c => `<option value="${escHtml(c)}"${c===m.categoria?' selected':''}>${escHtml(c)}</option>`).join('');
+    const subs = (m.seccion && m.categoria) ? getSubcatsForCat(m.seccion, m.categoria) : [];
+    const subOpts = subs.map(s => `<option value="${escHtml(s)}"${s===m.subcategoria?' selected':''}>${escHtml(s)}</option>`).join('');
+
+    return `<div style="display:flex;flex-direction:column;gap:3px;">
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="seccion" data-idx="${i}" onchange="onSeccionChange(${i},this.value)">
+            <option value="">Sección</option>${secOpts}</select>
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${i}" onchange="onCategoriaChange(${i},this.value)">
+            <option value="">Categoría</option>${catOpts}</select>
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${i}" onchange="mpPendingItems[${i}].subcategoria=this.value">
+            <option value="">Subcategoría</option>${subOpts}</select>
+    </div>`;
+}
+
+function onSeccionChange(i, val) {
+    mpPendingItems[i].seccion = val;
+    mpPendingItems[i].categoria = '';
+    mpPendingItems[i].subcategoria = '';
+    const cats = getCategoriasForSeccion(val);
+    const catSel = document.querySelector(`select[data-role="categoria"][data-idx="${i}"]`);
+    catSel.innerHTML = '<option value="">Categoría</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${i}"]`);
+    subSel.innerHTML = '<option value="">Subcategoría</option>';
+}
+
+function onCategoriaChange(i, val) {
+    mpPendingItems[i].categoria = val;
+    mpPendingItems[i].subcategoria = '';
+    const subs = getSubcatsForCat(mpPendingItems[i].seccion, val);
+    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${i}"]`);
+    subSel.innerHTML = '<option value="">Subcategoría</option>' + subs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+}
+
 function renderMPPreview(movs) {
     mpPendingItems = movs.map(m => ({
         ...m,
         action: m.match_existente ? 'conciliar' : (m.match_factura ? 'conciliar' : 'importar'),
-        categoria: m.categoria_sugerida || '',
         cliente_id: m.match_factura ? m.match_factura.cliente_id : '',
         match_id: m.match_existente ? m.match_existente.id : 0,
         match_factura_id: m.match_factura ? m.match_factura.factura_id : 0,
@@ -368,8 +415,6 @@ function renderMPPreview(movs) {
     const clienteOpts = mpClientes.map(c => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
 
     mpPendingItems.forEach((m, i) => {
-        const cats = m.tipo === 'ingreso' ? mpCatsIngreso : mpCatsGasto;
-        const catOpts = cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
         const color = m.tipo === 'ingreso' ? 'var(--success)' : 'var(--danger)';
         const sign = m.tipo === 'ingreso' ? '+' : '-';
 
@@ -402,22 +447,19 @@ function renderMPPreview(movs) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="font-size:.8rem;white-space:nowrap">${escHtml(m.fecha)}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(m.descripcion)}">
+            <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(m.descripcion)}">
                 ${escHtml(m.descripcion)}
                 <span class="badge ${m.cat_method==='pendiente'?'status-warning':'status-success'}" style="font-size:.6rem;margin-left:4px">${m.cat_method}</span>
             </td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${sign}$${Number(m.monto).toLocaleString('es-CL')}</td>
-            <td><select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].categoria=this.value">
-                <option value="">Sin categoría</option>${catOpts}</select></td>
+            <td>${buildEerrSelectors(i, m)}</td>
             <td><select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
                 <option value="">Sin cliente</option>${clienteOpts}</select></td>
             <td>${matchHtml}</td>
             <td>${actionHtml}</td>`;
 
-        // Set selected values
-        const selCat = tr.querySelectorAll('select')[0];
-        if (m.categoria) selCat.value = m.categoria;
-        const selCli = tr.querySelectorAll('select')[1];
+        // Set cliente
+        const selCli = tr.querySelector('select[onchange*="cliente_id"]');
         if (m.cliente_id) selCli.value = m.cliente_id;
 
         tbody.appendChild(tr);
@@ -433,7 +475,8 @@ async function confirmMPImport() {
         mp_id: m.mp_id, action: m.action, tipo: m.tipo,
         descripcion: m.descripcion, monto: m.monto, fecha: m.fecha,
         metodo: m.metodo, op_type: m.op_type,
-        categoria: m.categoria, cliente_id: m.cliente_id || '',
+        seccion: m.seccion || '', categoria: m.categoria || '', subcategoria: m.subcategoria || '',
+        cliente_id: m.cliente_id || '',
         match_id: m.match_id || 0, match_factura_id: m.match_factura_id || 0,
     }));
 

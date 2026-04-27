@@ -942,60 +942,59 @@ switch ($action) {
             $already = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago' AND notas LIKE ?", ["%mp_id:$mp_id%"]);
             if ($already > 0) continue;
 
-            // Auto-categorizar
-            $cat_sugerida = '';
+            // Auto-categorizar usando categorias_eerr (4 niveles)
+            $cat_eerr = null; // {seccion, categoria, subcategoria}
             $cat_method = 'pendiente';
             $dl = strtolower($desc);
 
-            // Reglas exactas
+            // Reglas de categorización existentes
+            $cat_from_rules = '';
             foreach ($reglas as $r) {
-                if ($r['tipo'] === 'exact' && strtolower($r['patron']) === $dl) {
-                    $cat_sugerida = $r['categoria'];
-                    $cat_method = 'regla';
-                    break;
-                }
+                if ($r['tipo'] === 'exact' && strtolower($r['patron']) === $dl) { $cat_from_rules = $r['categoria']; $cat_method = 'regla'; break; }
             }
-            // Reglas keyword
-            if (!$cat_sugerida) {
+            if (!$cat_from_rules) {
                 foreach ($reglas as $r) {
-                    if ($r['tipo'] === 'keyword' && str_contains($dl, strtolower($r['patron']))) {
-                        $cat_sugerida = $r['categoria'];
-                        $cat_method = 'regla';
-                        break;
-                    }
+                    if ($r['tipo'] === 'keyword' && str_contains($dl, strtolower($r['patron']))) { $cat_from_rules = $r['categoria']; $cat_method = 'regla'; break; }
                 }
             }
-            // Historial
-            if (!$cat_sugerida) {
-                foreach ($historial_cat as $h) {
-                    if ($h['descripcion'] && str_contains($dl, strtolower(substr($h['descripcion'], 0, 20)))) {
-                        $cat_sugerida = $h['categoria'];
-                        $cat_method = 'historial';
-                        break;
-                    }
-                }
-            }
-            // Fallback por keywords conocidos
-            if (!$cat_sugerida) {
-                $kw_map = [
-                    'claude' => 'Software y herramientas', 'anthropic' => 'Software y herramientas',
-                    'hostinger' => 'Hosting y dominios', 'hosting' => 'Hosting y dominios',
-                    'google' => 'Software y herramientas', 'workspace' => 'Software y herramientas',
-                    'make.com' => 'Software y herramientas', 'twilio' => 'Software y herramientas',
-                    'highlevel' => 'Software y herramientas', 'ghl' => 'Software y herramientas',
-                    'tgr' => 'Impuestos', 'tesoreria' => 'Impuestos',
+
+            // Keyword map → categorias_eerr (seccion.categoria.subcategoria)
+            if (!$cat_from_rules) {
+                $kw_eerr = [
+                    // Gastos CdV
+                    'claude' => ['Costo de Ventas','Herramientas de producción','IA'],
+                    'anthropic' => ['Costo de Ventas','Herramientas de producción','IA'],
+                    'make.com' => ['Costo de Ventas','Herramientas de producción','Automatización'],
+                    'highlevel' => ['Costo de Ventas','Herramientas de producción','Automatización'],
+                    'ghl' => ['Costo de Ventas','Herramientas de producción','Automatización'],
+                    // Gastos GAV
+                    'hostinger' => ['GAV','Infraestructura','Hosting y dominios'],
+                    'hosting' => ['GAV','Infraestructura','Hosting y dominios'],
+                    'google' => ['GAV','Infraestructura','Software operativo'],
+                    'workspace' => ['GAV','Infraestructura','Software operativo'],
+                    'twilio' => ['GAV','Infraestructura','Telefonía y comunicaciones'],
+                    // No Operacionales
+                    'tgr' => ['No Operacionales','Impuestos','IVA'],
+                    'tesoreria' => ['No Operacionales','Impuestos','IVA'],
                 ];
-                foreach ($kw_map as $kw => $cat) {
+                foreach ($kw_eerr as $kw => $eerr) {
                     if (str_contains($dl, $kw)) {
-                        $cat_sugerida = $cat;
+                        $cat_eerr = ['seccion' => $eerr[0], 'categoria' => $eerr[1], 'subcategoria' => $eerr[2]];
                         $cat_method = 'auto';
                         break;
                     }
                 }
             }
-            if (!$cat_sugerida && $tipo === 'ingreso') {
-                $cat_sugerida = 'Fee mensual';
-                $cat_method = 'auto';
+
+            // Fallback ingresos
+            if (!$cat_eerr && $tipo === 'ingreso') {
+                $cat_eerr = ['seccion' => 'Ingresos', 'categoria' => 'Otros ingresos', 'subcategoria' => 'Reembolsos'];
+                $cat_method = 'pendiente';
+            }
+            // Fallback gastos sin match
+            if (!$cat_eerr && $tipo === 'gasto') {
+                $cat_eerr = ['seccion' => 'GAV', 'categoria' => 'Otros GAV', 'subcategoria' => 'Viáticos'];
+                $cat_method = 'pendiente';
             }
 
             // Buscar match en movimientos existentes (fecha ±3 días, mismo monto)
@@ -1026,12 +1025,15 @@ switch ($action) {
             $movements[] = [
                 'mp_id' => $mp_id, 'fecha' => $fecha, 'tipo' => $tipo, 'descripcion' => $desc,
                 'monto' => $monto, 'metodo' => $method, 'op_type' => $op_type,
-                'categoria_sugerida' => $cat_sugerida, 'cat_method' => $cat_method,
+                'seccion' => $cat_eerr['seccion'] ?? '', 'categoria' => $cat_eerr['categoria'] ?? '',
+                'subcategoria' => $cat_eerr['subcategoria'] ?? '', 'cat_method' => $cat_method,
                 'match_existente' => $match, 'match_factura' => $match_factura,
             ];
         }
 
-        respond(['movements' => $movements, 'total_api' => count($all_results)]);
+        // Enviar también las categorías EERR para los selectores
+        $cats_eerr = query_all("SELECT id, seccion, categoria, subcategoria, tipo, orden FROM categorias_eerr WHERE activa = 1 ORDER BY orden") ?: [];
+        respond(['movements' => $movements, 'total_api' => count($all_results), 'categorias' => $cats_eerr]);
         break;
 
     // Paso 2: Confirmar — importa o concilia según decisión del usuario
@@ -1057,7 +1059,9 @@ switch ($action) {
 
             if ($action_type === 'importar') {
                 $tipo = $item['tipo'] ?? 'gasto';
+                $seccion = $item['seccion'] ?? '';
                 $categoria = $item['categoria'] ?? 'general';
+                $subcategoria = $item['subcategoria'] ?? '';
                 $desc = $item['descripcion'] ?? '';
                 $monto = (int)($item['monto'] ?? 0);
                 $fecha = $item['fecha'] ?? date('Y-m-d');
@@ -1065,33 +1069,40 @@ switch ($action) {
                 $op_type = $item['op_type'] ?? '';
                 $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
 
-                db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                    [$tipo, $categoria, $method, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
+                db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                    [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
                 $imported++;
 
             } elseif ($action_type === 'conciliar') {
                 $match_id = (int)($item['match_id'] ?? 0);
                 if ($match_id > 0) {
-                    // Actualizar el movimiento existente: agregar referencia MP y marcar como conciliado
                     $existing = query_one("SELECT notas FROM finanzas WHERE id = ?", [$match_id]);
                     $new_notes = trim(($existing['notas'] ?? '') . " | conciliado_mp:$mp_id");
-                    db_execute("UPDATE finanzas SET notas = ?, origen = CASE WHEN origen = 'manual' THEN 'conciliado' ELSE origen END WHERE id = ?", [$new_notes, $match_id]);
+                    // Actualizar existente: agregar referencia MP, actualizar categorización EERR si viene
+                    $upd_sql = "UPDATE finanzas SET notas = ?, origen = CASE WHEN origen = 'manual' THEN 'conciliado' ELSE origen END";
+                    $upd_params = [$new_notes];
+                    if (!empty($item['seccion'])) { $upd_sql .= ", seccion = ?"; $upd_params[] = $item['seccion']; }
+                    if (!empty($item['categoria'])) { $upd_sql .= ", categoria = ?"; $upd_params[] = $item['categoria']; }
+                    if (!empty($item['subcategoria'])) { $upd_sql .= ", subcategoria = ?"; $upd_params[] = $item['subcategoria']; }
+                    $upd_sql .= " WHERE id = ?";
+                    $upd_params[] = $match_id;
+                    db_execute($upd_sql, $upd_params);
                     $reconciled++;
                 }
-                // Si hay factura match, también conciliar
                 $fac_id = (int)($item['match_factura_id'] ?? 0);
                 if ($fac_id > 0 && !$match_id) {
-                    // Crear el movimiento vinculado a la factura
                     $tipo = $item['tipo'] ?? 'ingreso';
-                    $categoria = $item['categoria'] ?? 'Fee mensual';
+                    $seccion = $item['seccion'] ?? 'Ingresos';
+                    $categoria = $item['categoria'] ?? 'Suscripciones';
+                    $subcategoria = $item['subcategoria'] ?? 'Custom';
                     $desc = $item['descripcion'] ?? '';
                     $monto = (int)($item['monto'] ?? 0);
                     $fecha = $item['fecha'] ?? date('Y-m-d');
                     $method = $item['metodo'] ?? '';
                     $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
 
-                    db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, factura_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                        [$tipo, $categoria, $method, $desc, $monto, $cliente_id, $fac_id, $fecha, $fecha, "mp_id:$mp_id|conciliado_factura:$fac_id"]);
+                    db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, factura_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                        [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fac_id, $fecha, $fecha, "mp_id:$mp_id|conciliado_factura:$fac_id"]);
                     $reconciled++;
                 }
             } else {
