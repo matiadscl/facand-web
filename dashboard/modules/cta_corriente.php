@@ -39,7 +39,7 @@ if ($cliente_sel) {
         <div class="kpi-value"><?= format_money($total_cxc) ?></div>
     </div>
     <div class="kpi-card" style="border-left:3px solid var(--success)">
-        <div class="kpi-label">Disponible en Cuentas Clientes</div>
+        <div class="kpi-label">Disponible en Cta Corriente Externa</div>
         <div class="kpi-value success"><?= format_money($total_favor) ?></div>
         <div class="kpi-sub">Comprometido para inversión/servicios</div>
     </div>
@@ -52,7 +52,7 @@ if ($cliente_sel) {
 <!-- Tabla resumen por cliente -->
 <div class="table-container" style="margin-bottom:20px;">
     <div class="table-header">
-        <span class="table-title">Cuentas Clientes</span>
+        <span class="table-title">Cuenta Corriente Externa</span>
         <div class="table-actions">
             <button class="btn btn-primary btn-sm" onclick="openNewCC('pago')">+ Abono</button>
             <button class="btn btn-secondary btn-sm" onclick="openNewCC('gasto')">+ Gasto</button>

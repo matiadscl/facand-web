@@ -407,8 +407,8 @@ function rebuildMPTable() {
             actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value;rebuildMPTable()">`;
             actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
             if (m.match_existente || m.match_factura) actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
-            if (m.tipo === 'ingreso') actionHtml += `<option value="abono_cc"${m.action==='abono_cc'?' selected':''}>Abono cta cliente</option>`;
-            actionHtml += `<option value="skip">Omitir</option></select>`;
+            if (m.tipo === 'ingreso') actionHtml += `<option value="abono_cc"${m.action==='abono_cc'?' selected':''}>Cta corriente ext.</option>`;
+            actionHtml += `<option value="skip"${m.action==='skip'?' selected':''}>Omitir</option></select>`;
         }
 
         // Botón desglosar
@@ -471,7 +471,7 @@ function rebuildMPTable() {
                     <td style="font-size:.65rem;">
                         <select class="form-select" style="font-size:.65rem;padding:2px 4px;" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
                             <option value="importar"${d.sub_action==='importar'?' selected':''}>EERR</option>
-                            ${m.tipo==='ingreso' ? `<option value="abono_cc"${d.sub_action==='abono_cc'?' selected':''}>Cta cliente</option>` : ''}
+                            ${m.tipo==='ingreso' ? `<option value="abono_cc"${d.sub_action==='abono_cc'?' selected':''}>Cta corriente ext.</option>` : ''}
                         </select>
                     </td>
                     <td style="font-size:.75rem;">
@@ -482,7 +482,7 @@ function rebuildMPTable() {
                         <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
-                    <td>${isSubAbono ? '<span style="font-size:.7rem;color:var(--accent);">Abono cuenta corriente</span>' : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
+                    <td>${isSubAbono ? '<span style="font-size:.7rem;color:var(--accent);">Cuenta corriente externa</span>' : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
                     <td><select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
                         <option value="">${isSubAbono ? '* Cliente' : 'Sin cliente'}</option>${clienteOpts}</select></td>
                     <td style="font-size:.7rem;color:var(--text-muted);"></td>
@@ -618,15 +618,24 @@ function buildEerrSelectors(key, m, isSub) {
         : `onSubcategoriaChange(${key},this.value,false)`;
 
     // Si tiene valor custom, mostrar input en vez de select
+    const clearCatHandler = isSub
+        ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].categoria='';mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria='';rebuildMPTable()`
+        : `mpPendingItems[${key}].categoria='';mpPendingItems[${key}].subcategoria='';rebuildMPTable()`;
+    const clearSubHandler = isSub
+        ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria='';rebuildMPTable()`
+        : `mpPendingItems[${key}].subcategoria='';rebuildMPTable()`;
+
     const catHtml = isCustomCat
-        ? `<input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;" value="${escHtml(m.categoria)}" data-role="categoria" data-idx="${key}"
-            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].categoria=this.value` : `mpPendingItems[${key}].categoria=this.value`}">`
+        ? `<div style="display:flex;gap:2px;"><input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;flex:1;" value="${escHtml(m.categoria)}" data-role="categoria" data-idx="${key}"
+            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].categoria=this.value` : `mpPendingItems[${key}].categoria=this.value`}">
+            <button type="button" style="font-size:.6rem;padding:0 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer;color:var(--danger);" onclick="${clearCatHandler}" title="Quitar">x</button></div>`
         : `<select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${key}" onchange="${catHandler}">
             <option value="">Categoría</option>${catOpts}<option value="__nueva__">+ Crear nueva</option></select>`;
 
     const subHtml = isCustomSub
-        ? `<input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;" value="${escHtml(m.subcategoria)}" data-role="subcategoria" data-idx="${key}"
-            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria=this.value` : `mpPendingItems[${key}].subcategoria=this.value`}">`
+        ? `<div style="display:flex;gap:2px;"><input type="text" class="form-select" style="font-size:.7rem;padding:3px 5px;flex:1;" value="${escHtml(m.subcategoria)}" data-role="subcategoria" data-idx="${key}"
+            onchange="${isSub ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria=this.value` : `mpPendingItems[${key}].subcategoria=this.value`}">
+            <button type="button" style="font-size:.6rem;padding:0 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer;color:var(--danger);" onclick="${clearSubHandler}" title="Quitar">x</button></div>`
         : `<select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${key}" onchange="${subHandler}">
             <option value="">Subcategoría</option>${subOpts}${subs.length > 0 ? '<option value="__nueva__">+ Crear nueva</option>' : ''}</select>`;
 
@@ -672,7 +681,7 @@ async function confirmMPImport() {
     // Validaciones
     for (const m of mpPendingItems) {
         if (m.action === 'abono_cc' && !m.desglose && !m.cliente_id) {
-            toast(`"${m.descripcion}": Abono a cuenta cliente requiere seleccionar un cliente`, 'error');
+            toast(`"${m.descripcion}": Cuenta corriente externa requiere seleccionar un concepto o cliente`, 'error');
             btn.disabled = false;
             btn.textContent = 'Confirmar Importación';
             return;

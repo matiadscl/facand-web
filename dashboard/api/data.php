@@ -1142,8 +1142,8 @@ switch ($action) {
 
                     if ($sub_action === 'abono_cc' && $d_cliente) {
                         db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
-                            [$d_cliente, "Abono MP: $d_desc", $d_monto, $fecha]);
-                        db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Abono cuenta cliente", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                            [$d_cliente, "Cta ext MP: $d_desc", $d_monto, $fecha]);
+                        db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Cuenta corriente externa", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
                             [$d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|abono_cc|method:$method"]);
                         $reconciled++;
                     } else {
@@ -1181,8 +1181,8 @@ switch ($action) {
                 $method = $item['metodo'] ?? '';
 
                 db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
-                    [$cliente_id, "Abono MP: $desc", $monto, $fecha]);
-                db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Abono cuenta cliente", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                    [$cliente_id, "Cta ext MP: $desc", $monto, $fecha]);
+                db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Cuenta corriente externa", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
                     [$desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|abono_cc|method:$method"]);
                 $reconciled++;
 
