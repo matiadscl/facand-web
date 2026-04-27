@@ -732,11 +732,16 @@ async function confirmMPImport() {
 
     // Validaciones
     for (const m of mpPendingItems) {
-        if (m.action === 'abono_cc' && !m.desglose && !m.cliente_id) {
-            toast(`"${m.descripcion}": Cuenta corriente externa requiere seleccionar un concepto o cliente`, 'error');
-            btn.disabled = false;
-            btn.textContent = 'Confirmar Importación';
-            return;
+        if (m.action === 'abono_cc' && !m.desglose) {
+            const ct = m.concepto_tipo || 'transferencia';
+            if (ct === 'cliente' && !m.cliente_id) {
+                toast(`"${m.descripcion}": Selecciona un cliente`, 'error');
+                btn.disabled = false; btn.textContent = 'Confirmar Importación'; return;
+            }
+            if (ct === 'socio' && !m.concepto_entidad) {
+                toast(`"${m.descripcion}": Selecciona un socio`, 'error');
+                btn.disabled = false; btn.textContent = 'Confirmar Importación'; return;
+            }
         }
         if (m.desglose && m.action !== 'skip') {
             const total = m.desglose.reduce((s, d) => s + (parseInt(d.monto) || 0), 0);
