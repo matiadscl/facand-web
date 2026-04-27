@@ -352,43 +352,6 @@ function getSubcatsForCat(seccion, categoria) {
     return mpCategorias.filter(c => c.seccion === seccion && c.categoria === categoria).map(c => c.subcategoria);
 }
 
-function buildEerrSelectors(i, m) {
-    const secciones = getSeccionesForTipo(m.tipo);
-    const secOpts = secciones.map(s => `<option value="${escHtml(s)}"${s===m.seccion?' selected':''}>${escHtml(s)}</option>`).join('');
-    const cats = m.seccion ? getCategoriasForSeccion(m.seccion) : [];
-    const catOpts = cats.map(c => `<option value="${escHtml(c)}"${c===m.categoria?' selected':''}>${escHtml(c)}</option>`).join('');
-    const subs = (m.seccion && m.categoria) ? getSubcatsForCat(m.seccion, m.categoria) : [];
-    const subOpts = subs.map(s => `<option value="${escHtml(s)}"${s===m.subcategoria?' selected':''}>${escHtml(s)}</option>`).join('');
-
-    return `<div style="display:flex;flex-direction:column;gap:3px;">
-        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="seccion" data-idx="${i}" onchange="onSeccionChange(${i},this.value)">
-            <option value="">Sección</option>${secOpts}</select>
-        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${i}" onchange="onCategoriaChange(${i},this.value)">
-            <option value="">Categoría</option>${catOpts}</select>
-        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${i}" onchange="mpPendingItems[${i}].subcategoria=this.value">
-            <option value="">Subcategoría</option>${subOpts}</select>
-    </div>`;
-}
-
-function onSeccionChange(i, val) {
-    mpPendingItems[i].seccion = val;
-    mpPendingItems[i].categoria = '';
-    mpPendingItems[i].subcategoria = '';
-    const cats = getCategoriasForSeccion(val);
-    const catSel = document.querySelector(`select[data-role="categoria"][data-idx="${i}"]`);
-    catSel.innerHTML = '<option value="">Categoría</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
-    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${i}"]`);
-    subSel.innerHTML = '<option value="">Subcategoría</option>';
-}
-
-function onCategoriaChange(i, val) {
-    mpPendingItems[i].categoria = val;
-    mpPendingItems[i].subcategoria = '';
-    const subs = getSubcatsForCat(mpPendingItems[i].seccion, val);
-    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${i}"]`);
-    subSel.innerHTML = '<option value="">Subcategoría</option>' + subs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
-}
-
 function renderMPPreview(movs) {
     mpPendingItems = movs.map(m => ({
         ...m,
@@ -396,10 +359,10 @@ function renderMPPreview(movs) {
         cliente_id: m.match_factura ? m.match_factura.cliente_id : '',
         match_id: m.match_existente ? m.match_existente.id : 0,
         match_factura_id: m.match_factura ? m.match_factura.factura_id : 0,
+        desglose: null, // null = sin desglose, array = sub-items
     }));
 
-    const preview = document.getElementById('mpPreview');
-    preview.style.display = 'block';
+    document.getElementById('mpPreview').style.display = 'block';
 
     const matched = mpPendingItems.filter(m => m.match_existente || m.match_factura).length;
     const autocat = mpPendingItems.filter(m => m.cat_method !== 'pendiente').length;
@@ -409,61 +372,199 @@ function renderMPPreview(movs) {
          <span style="color:var(--warning)">Pendientes: <strong>${movs.length - autocat}</strong></span>
          <span style="color:var(--accent)">Con match: <strong>${matched}</strong></span>`;
 
+    rebuildMPTable();
+}
+
+function rebuildMPTable() {
     const tbody = document.getElementById('mpPreviewBody');
     tbody.innerHTML = '';
-
     const clienteOpts = mpClientes.map(c => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
 
     mpPendingItems.forEach((m, i) => {
         const color = m.tipo === 'ingreso' ? 'var(--success)' : 'var(--danger)';
         const sign = m.tipo === 'ingreso' ? '+' : '-';
+        const isDesglosado = m.desglose && m.desglose.length > 0;
 
-        // Conciliación info
+        // Match info
         let matchHtml = '<span style="font-size:.75rem;color:var(--text-muted)">Sin match</span>';
         if (m.match_existente) {
             const ex = m.match_existente;
             matchHtml = `<div style="font-size:.75rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--accent);">
-                <strong style="color:var(--accent)">Match encontrado</strong><br>
-                #${ex.id}: ${escHtml(ex.descripcion.substring(0,30))}<br>
-                ${ex.fecha} · ${ex.origen} · ${escHtml(ex.categoria)}
+                <strong style="color:var(--accent)">Match</strong> #${ex.id}: ${escHtml(ex.descripcion.substring(0,25))}<br>
+                ${ex.fecha} · ${escHtml(ex.categoria)}
             </div>`;
         } else if (m.match_factura) {
             const fac = m.match_factura;
             matchHtml = `<div style="font-size:.75rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--success);">
                 <strong style="color:var(--success)">Factura ${escHtml(fac.numero)}</strong><br>
-                ${escHtml(fac.cliente || 'Sin cliente')} · $${Number(fac.total).toLocaleString('es-CL')}<br>
-                Estado: ${fac.estado}${fac.cxc_estado ? ' · CxC: ' + fac.cxc_estado : ''}
+                ${escHtml(fac.cliente || '')} · $${Number(fac.total).toLocaleString('es-CL')}
             </div>`;
         }
 
-        // Acción selector
+        // Acción
         let actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value">`;
         actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
-        if (m.match_existente || m.match_factura) {
-            actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
-        }
+        if (m.match_existente || m.match_factura) actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
         actionHtml += `<option value="skip">Omitir</option></select>`;
 
+        // Botón desglosar
+        const desgloseBtn = isDesglosado
+            ? `<button class="btn btn-secondary btn-sm" style="font-size:.65rem;margin-top:4px;" onclick="removeDesglose(${i})">Quitar desglose</button>`
+            : `<button class="btn btn-secondary btn-sm" style="font-size:.65rem;margin-top:4px;" onclick="addDesglose(${i})">Desglosar</button>`;
+
+        // Fila principal
         const tr = document.createElement('tr');
+        tr.style.cssText = isDesglosado ? 'background:var(--bg);' : '';
         tr.innerHTML = `
             <td style="font-size:.8rem;white-space:nowrap">${escHtml(m.fecha)}</td>
             <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(m.descripcion)}">
                 ${escHtml(m.descripcion)}
                 <span class="badge ${m.cat_method==='pendiente'?'status-warning':'status-success'}" style="font-size:.6rem;margin-left:4px">${m.cat_method}</span>
+                ${isDesglosado ? '<br><span class="badge" style="font-size:.6rem;background:var(--accent);color:#fff;">'+m.desglose.length+' items</span>' : ''}
             </td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${sign}$${Number(m.monto).toLocaleString('es-CL')}</td>
-            <td>${buildEerrSelectors(i, m)}</td>
-            <td><select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
-                <option value="">Sin cliente</option>${clienteOpts}</select></td>
+            <td>${isDesglosado ? '<span style="font-size:.72rem;color:var(--text-muted)">Ver desglose abajo</span>' : buildEerrSelectors(i, m)}</td>
+            <td>${isDesglosado ? '' : `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
+                <option value="">Sin cliente</option>${clienteOpts}</select>`}</td>
             <td>${matchHtml}</td>
-            <td>${actionHtml}</td>`;
+            <td>${actionHtml}<br>${desgloseBtn}</td>`;
 
-        // Set cliente
-        const selCli = tr.querySelector('select[onchange*="cliente_id"]');
-        if (m.cliente_id) selCli.value = m.cliente_id;
-
+        if (!isDesglosado) {
+            const selCli = tr.querySelector('select[onchange*="cliente_id"]');
+            if (selCli && m.cliente_id) selCli.value = m.cliente_id;
+        }
         tbody.appendChild(tr);
+
+        // Filas de desglose
+        if (isDesglosado) {
+            m.desglose.forEach((d, j) => {
+                const subTr = document.createElement('tr');
+                subTr.style.cssText = 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
+                subTr.innerHTML = `
+                    <td></td>
+                    <td style="font-size:.75rem;">
+                        <input type="text" class="form-select" style="font-size:.72rem;padding:3px 6px;width:100%;" value="${escHtml(d.descripcion)}"
+                            placeholder="Descripción" onchange="mpPendingItems[${i}].desglose[${j}].descripcion=this.value">
+                    </td>
+                    <td style="text-align:right;">
+                        <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
+                            placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
+                    </td>
+                    <td>${buildEerrSelectors(`${i}_${j}`, d, true)}</td>
+                    <td><select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
+                        <option value="">Sin cliente</option>${clienteOpts}</select></td>
+                    <td style="font-size:.7rem;color:var(--text-muted);" id="desgloseBalance_${i}"></td>
+                    <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
+                const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
+                if (selCli && d.cliente_id) selCli.value = d.cliente_id;
+                tbody.appendChild(subTr);
+            });
+
+            // Fila para agregar + balance
+            const addTr = document.createElement('tr');
+            addTr.style.cssText = 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
+            const desgloseTotal = m.desglose.reduce((s, d) => s + (parseInt(d.monto) || 0), 0);
+            const diff = m.monto - desgloseTotal;
+            const balColor = diff === 0 ? 'var(--success)' : 'var(--danger)';
+            addTr.innerHTML = `
+                <td></td>
+                <td><span class="add-item-btn" onclick="addDesgloseItem(${i})">+ Agregar línea</span></td>
+                <td style="text-align:right;font-size:.72rem;font-weight:600;color:${balColor}">
+                    ${diff === 0 ? 'Cuadrado' : 'Diferencia: $' + Number(Math.abs(diff)).toLocaleString('es-CL')}
+                </td>
+                <td colspan="4" style="font-size:.7rem;color:var(--text-muted);">
+                    Total desglose: $${Number(desgloseTotal).toLocaleString('es-CL')} de $${Number(m.monto).toLocaleString('es-CL')}
+                </td>`;
+            tbody.appendChild(addTr);
+        }
     });
+}
+
+function addDesglose(i) {
+    const m = mpPendingItems[i];
+    m.desglose = [{
+        descripcion: m.descripcion,
+        monto: m.monto,
+        seccion: m.seccion || '', categoria: m.categoria || '', subcategoria: m.subcategoria || '',
+        cliente_id: m.cliente_id || '',
+    }];
+    m.action = 'importar';
+    rebuildMPTable();
+}
+
+function removeDesglose(i) {
+    mpPendingItems[i].desglose = null;
+    rebuildMPTable();
+}
+
+function addDesgloseItem(i) {
+    const m = mpPendingItems[i];
+    const used = m.desglose.reduce((s, d) => s + (parseInt(d.monto) || 0), 0);
+    const remaining = m.monto - used;
+    m.desglose.push({
+        descripcion: '', monto: Math.max(0, remaining),
+        seccion: m.tipo === 'ingreso' ? 'Ingresos' : 'GAV',
+        categoria: '', subcategoria: '', cliente_id: '',
+    });
+    rebuildMPTable();
+}
+
+function removeDesgloseItem(i, j) {
+    mpPendingItems[i].desglose.splice(j, 1);
+    if (mpPendingItems[i].desglose.length === 0) mpPendingItems[i].desglose = null;
+    rebuildMPTable();
+}
+
+function updateDesgloseAmount(i, j, val) {
+    mpPendingItems[i].desglose[j].monto = parseInt(val) || 0;
+    rebuildMPTable();
+}
+
+// Override para selectores dentro de desglose (usa key compuesto "i_j")
+function onSeccionChangeSub(key, val) {
+    const [i, j] = key.split('_').map(Number);
+    mpPendingItems[i].desglose[j].seccion = val;
+    mpPendingItems[i].desglose[j].categoria = '';
+    mpPendingItems[i].desglose[j].subcategoria = '';
+    const cats = getCategoriasForSeccion(val);
+    const catSel = document.querySelector(`select[data-role="categoria"][data-idx="${key}"]`);
+    if (catSel) catSel.innerHTML = '<option value="">Categoría</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${key}"]`);
+    if (subSel) subSel.innerHTML = '<option value="">Subcategoría</option>';
+}
+
+function onCategoriaChangeSub(key, val) {
+    const [i, j] = key.split('_').map(Number);
+    mpPendingItems[i].desglose[j].categoria = val;
+    mpPendingItems[i].desglose[j].subcategoria = '';
+    const subs = getSubcatsForCat(mpPendingItems[i].desglose[j].seccion, val);
+    const subSel = document.querySelector(`select[data-role="subcategoria"][data-idx="${key}"]`);
+    if (subSel) subSel.innerHTML = '<option value="">Subcategoría</option>' + subs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+}
+
+function buildEerrSelectors(key, m, isSub) {
+    const tipo = isSub ? (mpPendingItems[String(key).split('_')[0]]?.tipo || 'gasto') : m.tipo;
+    const secciones = getSeccionesForTipo(tipo);
+    const secOpts = secciones.map(s => `<option value="${escHtml(s)}"${s===m.seccion?' selected':''}>${escHtml(s)}</option>`).join('');
+    const cats = m.seccion ? getCategoriasForSeccion(m.seccion) : [];
+    const catOpts = cats.map(c => `<option value="${escHtml(c)}"${c===m.categoria?' selected':''}>${escHtml(c)}</option>`).join('');
+    const subs = (m.seccion && m.categoria) ? getSubcatsForCat(m.seccion, m.categoria) : [];
+    const subOpts = subs.map(s => `<option value="${escHtml(s)}"${s===m.subcategoria?' selected':''}>${escHtml(s)}</option>`).join('');
+
+    const secHandler = isSub ? `onSeccionChangeSub('${key}',this.value)` : `onSeccionChange(${key},this.value)`;
+    const catHandler = isSub ? `onCategoriaChangeSub('${key}',this.value)` : `onCategoriaChange(${key},this.value)`;
+    const subHandler = isSub
+        ? `mpPendingItems[${String(key).split('_')[0]}].desglose[${String(key).split('_')[1]}].subcategoria=this.value`
+        : `mpPendingItems[${key}].subcategoria=this.value`;
+
+    return `<div style="display:flex;flex-direction:column;gap:3px;">
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="seccion" data-idx="${key}" onchange="${secHandler}">
+            <option value="">Sección</option>${secOpts}</select>
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="categoria" data-idx="${key}" onchange="${catHandler}">
+            <option value="">Categoría</option>${catOpts}</select>
+        <select class="form-select" style="font-size:.7rem;padding:3px 5px;" data-role="subcategoria" data-idx="${key}" onchange="${subHandler}">
+            <option value="">Subcategoría</option>${subOpts}</select>
+    </div>`;
 }
 
 async function confirmMPImport() {
@@ -471,14 +572,37 @@ async function confirmMPImport() {
     btn.disabled = true;
     btn.textContent = 'Procesando...';
 
-    const items = mpPendingItems.map(m => ({
-        mp_id: m.mp_id, action: m.action, tipo: m.tipo,
-        descripcion: m.descripcion, monto: m.monto, fecha: m.fecha,
-        metodo: m.metodo, op_type: m.op_type,
-        seccion: m.seccion || '', categoria: m.categoria || '', subcategoria: m.subcategoria || '',
-        cliente_id: m.cliente_id || '',
-        match_id: m.match_id || 0, match_factura_id: m.match_factura_id || 0,
-    }));
+    // Validar desgloses cuadren
+    for (const m of mpPendingItems) {
+        if (m.desglose && m.action !== 'skip') {
+            const total = m.desglose.reduce((s, d) => s + (parseInt(d.monto) || 0), 0);
+            if (total !== m.monto) {
+                toast(`El desglose de "${m.descripcion}" no cuadra: $${Number(total).toLocaleString('es-CL')} vs $${Number(m.monto).toLocaleString('es-CL')}`, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Confirmar Importación';
+                return;
+            }
+        }
+    }
+
+    const items = mpPendingItems.map(m => {
+        const base = {
+            mp_id: m.mp_id, action: m.action, tipo: m.tipo,
+            descripcion: m.descripcion, monto: m.monto, fecha: m.fecha,
+            metodo: m.metodo, op_type: m.op_type,
+            seccion: m.seccion || '', categoria: m.categoria || '', subcategoria: m.subcategoria || '',
+            cliente_id: m.cliente_id || '',
+            match_id: m.match_id || 0, match_factura_id: m.match_factura_id || 0,
+        };
+        if (m.desglose && m.desglose.length > 0) {
+            base.desglose = m.desglose.map(d => ({
+                descripcion: d.descripcion, monto: parseInt(d.monto) || 0,
+                seccion: d.seccion || '', categoria: d.categoria || '', subcategoria: d.subcategoria || '',
+                cliente_id: d.cliente_id || '',
+            }));
+        }
+        return base;
+    });
 
     try {
         const body = new FormData();

@@ -1059,19 +1059,34 @@ switch ($action) {
 
             if ($action_type === 'importar') {
                 $tipo = $item['tipo'] ?? 'gasto';
-                $seccion = $item['seccion'] ?? '';
-                $categoria = $item['categoria'] ?? 'general';
-                $subcategoria = $item['subcategoria'] ?? '';
-                $desc = $item['descripcion'] ?? '';
-                $monto = (int)($item['monto'] ?? 0);
                 $fecha = $item['fecha'] ?? date('Y-m-d');
                 $method = $item['metodo'] ?? '';
                 $op_type = $item['op_type'] ?? '';
-                $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
 
-                db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                    [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
-                $imported++;
+                // ¿Tiene desglose?
+                $desglose = $item['desglose'] ?? null;
+                if (is_array($desglose) && count($desglose) > 0) {
+                    foreach ($desglose as $di => $d) {
+                        $d_desc = $d['descripcion'] ?? $item['descripcion'] ?? '';
+                        $d_monto = (int)($d['monto'] ?? 0);
+                        if ($d_monto <= 0) continue;
+                        $d_cliente = !empty($d['cliente_id']) ? (int)$d['cliente_id'] : null;
+                        db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                            [$tipo, $d['seccion'] ?? '', $d['categoria'] ?? 'general', $d['subcategoria'] ?? '', $d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|method:$method|op:$op_type"]);
+                        $imported++;
+                    }
+                } else {
+                    $seccion = $item['seccion'] ?? '';
+                    $categoria = $item['categoria'] ?? 'general';
+                    $subcategoria = $item['subcategoria'] ?? '';
+                    $desc = $item['descripcion'] ?? '';
+                    $monto = (int)($item['monto'] ?? 0);
+                    $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
+
+                    db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                        [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
+                    $imported++;
+                }
 
             } elseif ($action_type === 'conciliar') {
                 $match_id = (int)($item['match_id'] ?? 0);
