@@ -1088,9 +1088,17 @@ switch ($action) {
             ];
         }
 
-        // Enviar también las categorías EERR para los selectores
+        // Enviar categorías EERR, servicios y facturas pendientes para matching en desglose
         $cats_eerr = query_all("SELECT id, seccion, categoria, subcategoria, tipo, orden FROM categorias_eerr WHERE activa = 1 ORDER BY orden") ?: [];
-        respond(['movements' => $movements, 'total_api' => count($all_results), 'categorias' => $cats_eerr]);
+        $servicios_activos = query_all("SELECT s.id, s.cliente_id, c.nombre as cliente, s.nombre as servicio, s.monto, s.tipo as tipo_servicio
+            FROM servicios_cliente s JOIN clientes c ON s.cliente_id = c.id
+            WHERE s.estado IN ('activo') AND s.monto > 0 ORDER BY c.nombre") ?: [];
+        $facturas_pendientes = query_all("SELECT f.id, f.numero, f.cliente_id, c.nombre as cliente, f.total, f.estado,
+            cc.id as cxc_id, cc.monto_pendiente
+            FROM facturas f LEFT JOIN clientes c ON f.cliente_id = c.id
+            LEFT JOIN cuentas_cobrar cc ON cc.factura_id = f.id
+            WHERE f.estado IN ('emitida','pagada') ORDER BY f.fecha_emision DESC") ?: [];
+        respond(['movements' => $movements, 'total_api' => count($all_results), 'categorias' => $cats_eerr, 'servicios' => $servicios_activos, 'facturas' => $facturas_pendientes]);
         break;
 
     // Paso 2: Confirmar — importa o concilia según decisión del usuario

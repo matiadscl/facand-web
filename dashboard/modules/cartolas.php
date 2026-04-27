@@ -306,7 +306,9 @@ function clearFile(){document.getElementById('fileInput').value='';document.getE
 const mpClientes = <?= json_encode($clientes_mp) ?>;
 const mpSocios = <?= json_encode(query_all("SELECT id, nombre FROM equipo WHERE nombre IN ('Matías Hidalgo','Fabián Astorga') ORDER BY id") ?: []) ?>;
 let mpPendingItems = [];
-let mpCategorias = []; // se llena desde la API
+let mpCategorias = [];
+let mpServicios = [];
+let mpFacturas = [];
 
 async function previewMercadoPago() {
     const btn = document.getElementById('btnImportMP');
@@ -324,6 +326,8 @@ async function previewMercadoPago() {
         if (res && res.ok) {
             const movs = res.data.movements;
             mpCategorias = res.data.categorias || [];
+            mpServicios = res.data.servicios || [];
+            mpFacturas = res.data.facturas || [];
             if (movs.length === 0) {
                 status.innerHTML = '<span style="color:var(--success)">Todo sincronizado, no hay movimientos nuevos.</span>';
             } else {
@@ -490,8 +494,10 @@ function rebuildMPTable() {
                 } else if (isSubAbono) {
                     subClasifHtml = buildCceSelectors(i, j, d) + buildCceEntitySelector(i, j, d);
                 } else {
-                    subClasifHtml = buildEerrSelectors(`${i}_${j}`, d, true) + (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                        <option value="">Cliente (opcional)</option>${clienteOpts}</select>` : '');
+                    subClasifHtml = buildEerrSelectors(`${i}_${j}`, d, true)
+                        + (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.7rem;padding:3px 5px;margin-top:3px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value;rebuildMPTable()">
+                        <option value="">Cliente (opcional)</option>${clienteOpts}</select>` : '')
+                        + buildSubMatchHint(i, j, d);
                 }
 
                 subTr.innerHTML = `
@@ -623,6 +629,41 @@ function onCategoriaChangeSub(key, val) {
         mpPendingItems[i].desglose[j].subcategoria = '';
         rebuildMPTable();
     }
+}
+
+// ---- Match dinámico para sub-items ----
+function findSubMatch(monto, clienteId) {
+    const matches = [];
+    // Buscar en servicios activos
+    mpServicios.forEach(s => {
+        if (s.monto === monto) matches.push({ tipo: 'servicio', label: `${s.cliente}: ${s.servicio}`, cliente_id: s.cliente_id, monto: s.monto });
+        if (clienteId && String(s.cliente_id) === String(clienteId) && s.monto === monto) {
+            // match exacto cliente+monto, priorizar
+            matches.unshift({ tipo: 'servicio_exacto', label: `${s.cliente}: ${s.servicio}`, cliente_id: s.cliente_id, monto: s.monto });
+        }
+    });
+    // Buscar en facturas
+    mpFacturas.forEach(f => {
+        if (f.total === monto) matches.push({ tipo: 'factura', label: `Factura ${f.numero} — ${f.cliente} ($${Number(f.total).toLocaleString('es-CL')})`, cliente_id: f.cliente_id, factura_id: f.id, cxc_id: f.cxc_id });
+        if (clienteId && String(f.cliente_id) === String(clienteId) && f.total === monto) {
+            matches.unshift({ tipo: 'factura_exacta', label: `Factura ${f.numero} — ${f.cliente}`, cliente_id: f.cliente_id, factura_id: f.id, cxc_id: f.cxc_id });
+        }
+    });
+    // Deduplicar
+    const seen = new Set();
+    return matches.filter(m => { const k = m.tipo + m.label; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
+}
+
+function buildSubMatchHint(i, j, d) {
+    const monto = parseInt(d.monto) || 0;
+    const clienteId = d.cliente_id || '';
+    if (monto <= 0) return '';
+    const matches = findSubMatch(monto, clienteId);
+    if (!matches.length) return '';
+    return `<div style="margin-top:4px;padding:4px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--success);font-size:.68rem;">
+        <strong style="color:var(--success);">Match encontrado:</strong>
+        ${matches.map(m => `<div style="margin-top:2px;">${escHtml(m.label)}</div>`).join('')}
+    </div>`;
 }
 
 // ---- Cuenta Corriente Externa: selectores tipo + entidad ----
