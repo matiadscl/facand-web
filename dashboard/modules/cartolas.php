@@ -431,10 +431,13 @@ function rebuildMPTable() {
             clasificacionHtml = buildEerrSelectors(i, m);
         }
 
-        // Cliente: siempre visible (obligatorio en abono_cc)
-        const clienteRequired = isAbono ? ' style="font-size:.75rem;padding:4px 6px;border-color:var(--accent);"' : ' style="font-size:.75rem;padding:4px 6px;"';
-        const clienteHtml = isDesglosado ? '' : `<select class="form-select"${clienteRequired} onchange="mpPendingItems[${i}].cliente_id=this.value">
+        // Cliente: solo para ingresos (egresos son gastos de Facand, no de un cliente)
+        let clienteHtml = '';
+        if (!isDesglosado && m.tipo === 'ingreso') {
+            const clienteRequired = isAbono ? ' style="font-size:.75rem;padding:4px 6px;border-color:var(--accent);"' : ' style="font-size:.75rem;padding:4px 6px;"';
+            clienteHtml = `<select class="form-select"${clienteRequired} onchange="mpPendingItems[${i}].cliente_id=this.value">
                 <option value="">${isAbono ? '* Seleccionar cliente' : 'Sin cliente'}</option>${clienteOpts}</select>`;
+        }
 
         tr.innerHTML = `
             <td style="font-size:.8rem;white-space:nowrap">${escHtml(m.fecha)}</td>
