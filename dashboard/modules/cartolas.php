@@ -472,8 +472,8 @@ function rebuildMPTable() {
                     ? 'background:rgba(56,189,248,.06);border-left:3px solid var(--accent);'
                     : 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
                 subTr.innerHTML = `
-                    <td style="font-size:.65rem;">
-                        <select class="form-select" style="font-size:.65rem;padding:2px 4px;" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
+                    <td>
+                        <select class="form-select" style="font-size:.7rem;padding:3px 5px;${isSubAbono ? 'border-color:var(--accent);color:var(--accent);font-weight:600;' : ''}" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
                             <option value="importar"${d.sub_action==='importar'?' selected':''}>EERR</option>
                             ${m.tipo==='ingreso' ? `<option value="abono_cc"${d.sub_action==='abono_cc'?' selected':''}>Cta corriente ext.</option>` : ''}
                         </select>
@@ -487,8 +487,8 @@ function rebuildMPTable() {
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
                     <td>${isSubAbono ? buildCceSelectors(i, j, d) : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
-                    <td>${isSubAbono ? buildCceEntitySelector(i, j, d) : `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                        <option value="">Sin cliente</option>${clienteOpts}</select>`}</td>
+                    <td>${isSubAbono ? buildCceEntitySelector(i, j, d) : (m.tipo === 'ingreso' ? `<select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
+                        <option value="">Sin cliente</option>${clienteOpts}</select>` : '')}</td>
                     <td style="font-size:.7rem;color:var(--text-muted);"></td>
                     <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
                 const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
