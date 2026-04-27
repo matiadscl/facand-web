@@ -877,14 +877,13 @@ switch ($action) {
         break;
 
     // ---- MERCADO PAGO ----
-    case 'import_mercadopago':
-        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'cartolas') && !can_edit($user_id, 'conciliation')) fail('Sin permiso');
 
-        // Buscar credenciales: primero data/mp.env (servidor), luego .credentials/ (VPS)
-        $cred_paths = [
-            __DIR__ . '/../data/mp.env',
-            __DIR__ . '/../../../../.credentials/facand_mercadopago.env',
-        ];
+    // Paso 1: Preview — trae movimientos de MP, sugiere categoría y detecta duplicados
+    case 'preview_mercadopago':
+        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'cartolas')) fail('Sin permiso');
+
+        // Leer token
+        $cred_paths = [__DIR__ . '/../data/mp.env', __DIR__ . '/../../../../.credentials/facand_mercadopago.env'];
         $token = '';
         foreach ($cred_paths as $cred_file) {
             if (!file_exists($cred_file)) continue;
@@ -895,50 +894,41 @@ switch ($action) {
                 }
             }
         }
-        if (!$token) fail('Credenciales de Mercado Pago no configuradas. Crear data/mp.env con MP_ACCESS_TOKEN=...');
+        if (!$token) fail('Credenciales de Mercado Pago no configuradas');
 
-        // Obtener último movimiento MP importado para no duplicar
-        $last_date = query_scalar("SELECT MAX(fecha) FROM finanzas WHERE origen = 'mercadopago'");
-
+        // Fetch todos los pagos de MP
         $all_results = [];
         $offset_mp = 0;
-        $limit_mp = 100;
-
         do {
-            $params = http_build_query([
-                'sort' => 'date_created',
-                'criteria' => 'asc',
-                'limit' => $limit_mp,
-                'offset' => $offset_mp,
-            ]);
-            $url = "https://api.mercadopago.com/v1/payments/search?$params";
-
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
-                CURLOPT_TIMEOUT => 30,
-            ]);
+            $params = http_build_query(['sort' => 'date_created', 'criteria' => 'asc', 'limit' => 100, 'offset' => $offset_mp]);
+            $ch = curl_init("https://api.mercadopago.com/v1/payments/search?$params");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"], CURLOPT_TIMEOUT => 30]);
             $resp = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-
             if ($http_code !== 200) fail("Error de Mercado Pago (HTTP $http_code)");
-
             $data = json_decode($resp, true);
             if (!$data || !isset($data['results'])) fail('Respuesta inválida de Mercado Pago');
-
             $all_results = array_merge($all_results, $data['results']);
-            $offset_mp += $limit_mp;
-            $total = $data['paging']['total'] ?? 0;
-        } while ($offset_mp < $total);
+            $offset_mp += 100;
+        } while ($offset_mp < ($data['paging']['total'] ?? 0));
 
-        $imported = 0;
-        $skipped = 0;
+        // Cargar reglas de categorización
+        $reglas = query_all('SELECT * FROM reglas_categorizacion ORDER BY tipo, patron') ?: [];
+        $historial_cat = query_all('SELECT DISTINCT descripcion, categoria, subcategoria FROM finanzas WHERE categoria != "" AND categoria != "general" ORDER BY id DESC LIMIT 500') ?: [];
+
+        // Cargar movimientos existentes para matching (no-MP)
+        $existentes = query_all("SELECT id, tipo, descripcion, monto, fecha, origen, categoria, cliente_id, notas FROM finanzas WHERE origen != 'mercadopago' ORDER BY fecha DESC") ?: [];
+        // También cargar facturas+CxC para matching de ingresos
+        $facturas = query_all("SELECT f.id, f.numero, f.concepto, f.total, f.estado, f.fecha_emision, f.cliente_id,
+            c.nombre as cliente_nombre, cc.id as cxc_id, cc.monto_pendiente, cc.estado as cxc_estado
+            FROM facturas f LEFT JOIN clientes c ON f.cliente_id = c.id
+            LEFT JOIN cuentas_cobrar cc ON cc.factura_id = f.id
+            ORDER BY f.fecha_emision DESC") ?: [];
+
         $movements = [];
-
         foreach ($all_results as $p) {
-            if ($p['status'] !== 'approved') { $skipped++; continue; }
+            if ($p['status'] !== 'approved') continue;
 
             $fecha = substr($p['date_created'] ?? '', 0, 10);
             $desc = $p['description'] ?? 'Sin descripción';
@@ -946,36 +936,171 @@ switch ($action) {
             $op_type = $p['operation_type'] ?? '';
             $method = $p['payment_method_id'] ?? '';
             $mp_id = (string)($p['id'] ?? '');
-
-            // Determinar tipo: account_fund = ingreso, regular_payment = gasto
             $tipo = ($op_type === 'account_fund') ? 'ingreso' : 'gasto';
-            $categoria = ($tipo === 'ingreso') ? 'Transferencia MP' : 'Servicios digitales';
 
-            // Evitar duplicados por mp_id en notas
-            $exists = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago' AND notas LIKE ?", ["%mp_id:$mp_id%"]);
-            if ($exists > 0) { $skipped++; continue; }
+            // Ya importado?
+            $already = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago' AND notas LIKE ?", ["%mp_id:$mp_id%"]);
+            if ($already > 0) continue;
 
-            db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "mercadopago", ?, datetime("now"))',
-                [$tipo, $categoria, $method, $desc, $monto, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
+            // Auto-categorizar
+            $cat_sugerida = '';
+            $cat_method = 'pendiente';
+            $dl = strtolower($desc);
+
+            // Reglas exactas
+            foreach ($reglas as $r) {
+                if ($r['tipo'] === 'exact' && strtolower($r['patron']) === $dl) {
+                    $cat_sugerida = $r['categoria'];
+                    $cat_method = 'regla';
+                    break;
+                }
+            }
+            // Reglas keyword
+            if (!$cat_sugerida) {
+                foreach ($reglas as $r) {
+                    if ($r['tipo'] === 'keyword' && str_contains($dl, strtolower($r['patron']))) {
+                        $cat_sugerida = $r['categoria'];
+                        $cat_method = 'regla';
+                        break;
+                    }
+                }
+            }
+            // Historial
+            if (!$cat_sugerida) {
+                foreach ($historial_cat as $h) {
+                    if ($h['descripcion'] && str_contains($dl, strtolower(substr($h['descripcion'], 0, 20)))) {
+                        $cat_sugerida = $h['categoria'];
+                        $cat_method = 'historial';
+                        break;
+                    }
+                }
+            }
+            // Fallback por keywords conocidos
+            if (!$cat_sugerida) {
+                $kw_map = [
+                    'claude' => 'Software y herramientas', 'anthropic' => 'Software y herramientas',
+                    'hostinger' => 'Hosting y dominios', 'hosting' => 'Hosting y dominios',
+                    'google' => 'Software y herramientas', 'workspace' => 'Software y herramientas',
+                    'make.com' => 'Software y herramientas', 'twilio' => 'Software y herramientas',
+                    'highlevel' => 'Software y herramientas', 'ghl' => 'Software y herramientas',
+                    'tgr' => 'Impuestos', 'tesoreria' => 'Impuestos',
+                ];
+                foreach ($kw_map as $kw => $cat) {
+                    if (str_contains($dl, $kw)) {
+                        $cat_sugerida = $cat;
+                        $cat_method = 'auto';
+                        break;
+                    }
+                }
+            }
+            if (!$cat_sugerida && $tipo === 'ingreso') {
+                $cat_sugerida = 'Fee mensual';
+                $cat_method = 'auto';
+            }
+
+            // Buscar match en movimientos existentes (fecha ±3 días, mismo monto)
+            $match = null;
+            foreach ($existentes as $ex) {
+                if ((int)$ex['monto'] === $monto && abs(strtotime($ex['fecha']) - strtotime($fecha)) <= 3 * 86400) {
+                    $match = ['id' => $ex['id'], 'descripcion' => $ex['descripcion'], 'fecha' => $ex['fecha'], 'origen' => $ex['origen'], 'categoria' => $ex['categoria']];
+                    break;
+                }
+            }
+
+            // Buscar match en facturas/CxC (monto similar, fecha ±7 días)
+            $match_factura = null;
+            if ($tipo === 'ingreso') {
+                foreach ($facturas as $fac) {
+                    if ((int)$fac['total'] === $monto && abs(strtotime($fac['fecha_emision']) - strtotime($fecha)) <= 7 * 86400) {
+                        $match_factura = [
+                            'factura_id' => $fac['id'], 'numero' => $fac['numero'], 'concepto' => $fac['concepto'],
+                            'cliente' => $fac['cliente_nombre'], 'cliente_id' => $fac['cliente_id'],
+                            'total' => $fac['total'], 'estado' => $fac['estado'],
+                            'cxc_id' => $fac['cxc_id'], 'cxc_pendiente' => $fac['monto_pendiente'], 'cxc_estado' => $fac['cxc_estado'],
+                        ];
+                        break;
+                    }
+                }
+            }
 
             $movements[] = [
-                'fecha' => $fecha,
-                'tipo' => $tipo,
-                'descripcion' => $desc,
-                'monto' => $monto,
-                'metodo' => $method,
-                'mp_id' => $mp_id,
+                'mp_id' => $mp_id, 'fecha' => $fecha, 'tipo' => $tipo, 'descripcion' => $desc,
+                'monto' => $monto, 'metodo' => $method, 'op_type' => $op_type,
+                'categoria_sugerida' => $cat_sugerida, 'cat_method' => $cat_method,
+                'match_existente' => $match, 'match_factura' => $match_factura,
             ];
-            $imported++;
         }
 
-        log_activity('conciliation', "Importación Mercado Pago: $imported nuevos, $skipped omitidos");
-        respond(['imported' => $imported, 'skipped' => $skipped, 'total_api' => count($all_results), 'movements' => $movements]);
+        respond(['movements' => $movements, 'total_api' => count($all_results)]);
         break;
 
-    case 'get_mp_movements':
-        $movs = query_all("SELECT id, tipo, categoria, subcategoria, descripcion, monto, fecha, notas, created_at FROM finanzas WHERE origen = 'mercadopago' ORDER BY fecha DESC, id DESC");
-        respond($movs ?: []);
+    // Paso 2: Confirmar — importa o concilia según decisión del usuario
+    case 'confirm_mp_import':
+        if (!can_edit($user_id, 'finance') && !can_edit($user_id, 'cartolas')) fail('Sin permiso');
+
+        $items_json = $_POST['items'] ?? '';
+        $items = json_decode($items_json, true);
+        if (!$items || !is_array($items)) fail('No hay movimientos para procesar');
+
+        $imported = 0;
+        $reconciled = 0;
+        $skipped = 0;
+
+        foreach ($items as $item) {
+            $action_type = $item['action'] ?? 'skip'; // importar, conciliar, skip
+            $mp_id = $item['mp_id'] ?? '';
+            if (!$mp_id) continue;
+
+            // Ya existe?
+            $already = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago' AND notas LIKE ?", ["%mp_id:$mp_id%"]);
+            if ($already > 0) { $skipped++; continue; }
+
+            if ($action_type === 'importar') {
+                $tipo = $item['tipo'] ?? 'gasto';
+                $categoria = $item['categoria'] ?? 'general';
+                $desc = $item['descripcion'] ?? '';
+                $monto = (int)($item['monto'] ?? 0);
+                $fecha = $item['fecha'] ?? date('Y-m-d');
+                $method = $item['metodo'] ?? '';
+                $op_type = $item['op_type'] ?? '';
+                $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
+
+                db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                    [$tipo, $categoria, $method, $desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|method:$method|op:$op_type"]);
+                $imported++;
+
+            } elseif ($action_type === 'conciliar') {
+                $match_id = (int)($item['match_id'] ?? 0);
+                if ($match_id > 0) {
+                    // Actualizar el movimiento existente: agregar referencia MP y marcar como conciliado
+                    $existing = query_one("SELECT notas FROM finanzas WHERE id = ?", [$match_id]);
+                    $new_notes = trim(($existing['notas'] ?? '') . " | conciliado_mp:$mp_id");
+                    db_execute("UPDATE finanzas SET notas = ?, origen = CASE WHEN origen = 'manual' THEN 'conciliado' ELSE origen END WHERE id = ?", [$new_notes, $match_id]);
+                    $reconciled++;
+                }
+                // Si hay factura match, también conciliar
+                $fac_id = (int)($item['match_factura_id'] ?? 0);
+                if ($fac_id > 0 && !$match_id) {
+                    // Crear el movimiento vinculado a la factura
+                    $tipo = $item['tipo'] ?? 'ingreso';
+                    $categoria = $item['categoria'] ?? 'Fee mensual';
+                    $desc = $item['descripcion'] ?? '';
+                    $monto = (int)($item['monto'] ?? 0);
+                    $fecha = $item['fecha'] ?? date('Y-m-d');
+                    $method = $item['metodo'] ?? '';
+                    $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
+
+                    db_execute('INSERT INTO finanzas (tipo, categoria, subcategoria, descripcion, monto, cliente_id, factura_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                        [$tipo, $categoria, $method, $desc, $monto, $cliente_id, $fac_id, $fecha, $fecha, "mp_id:$mp_id|conciliado_factura:$fac_id"]);
+                    $reconciled++;
+                }
+            } else {
+                $skipped++;
+            }
+        }
+
+        log_activity('conciliation', "Import MP: $imported nuevos, $reconciled conciliados, $skipped omitidos");
+        respond(['imported' => $imported, 'reconciled' => $reconciled, 'skipped' => $skipped]);
         break;
 
     default:

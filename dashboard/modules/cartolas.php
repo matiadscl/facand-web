@@ -9,6 +9,11 @@
 $categorias = query_all('SELECT DISTINCT categoria FROM finanzas WHERE categoria != "" ORDER BY categoria') ?: [];
 $reglas = query_all('SELECT * FROM reglas_categorizacion ORDER BY tipo, patron') ?: [];
 $historial = query_all('SELECT DISTINCT descripcion, categoria, subcategoria FROM finanzas WHERE categoria != "" AND categoria != "general" AND origen = "banco" ORDER BY id DESC LIMIT 500') ?: [];
+$cats_finanzas = query_all('SELECT nombre, tipo FROM categorias_finanzas WHERE activa = 1 ORDER BY tipo, nombre') ?: [];
+$clientes_mp = query_all('SELECT id, nombre FROM clientes ORDER BY nombre') ?: [];
+
+$ultima_sync_mp = query_scalar("SELECT MAX(created_at) FROM finanzas WHERE origen = 'mercadopago'");
+$total_mp = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago'") ?? 0;
 ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -19,20 +24,44 @@ $historial = query_all('SELECT DISTINCT descripcion, categoria, subcategoria FRO
     <div class="table-header">
         <span class="table-title">Mercado Pago</span>
         <div class="table-actions">
-            <button class="btn btn-primary btn-sm" id="btnImportMP" onclick="importMercadoPago()">
+            <button class="btn btn-primary btn-sm" id="btnImportMP" onclick="previewMercadoPago()">
                 Importar desde Mercado Pago
             </button>
         </div>
     </div>
     <div id="mpStatus" style="display:none;padding:16px;text-align:center;"></div>
     <div id="mpLastSync" style="padding:8px 16px;font-size:.78rem;color:var(--text-muted);">
-        <?php
-        $ultima_sync_mp = query_scalar("SELECT MAX(created_at) FROM finanzas WHERE origen = 'mercadopago'");
-        $total_mp = query_scalar("SELECT COUNT(*) FROM finanzas WHERE origen = 'mercadopago'") ?? 0;
-        echo $ultima_sync_mp
+        <?= $ultima_sync_mp
             ? "Última sincronización: " . date('d/m/Y H:i', strtotime($ultima_sync_mp)) . " — $total_mp movimientos importados"
-            : "Sin importaciones previas";
-        ?>
+            : "Sin importaciones previas" ?>
+    </div>
+</div>
+
+<!-- Preview MP -->
+<div id="mpPreview" style="display:none;">
+    <div class="table-container" style="margin-bottom:20px;">
+        <div class="table-header">
+            <span class="table-title">Preview Mercado Pago</span>
+            <div id="mpPreviewStats" style="font-size:.78rem;display:flex;gap:16px;flex-wrap:wrap;"></div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr>
+                    <th style="width:90px">Fecha</th>
+                    <th>Descripción</th>
+                    <th style="text-align:right;width:110px">Monto</th>
+                    <th style="width:170px">Categoría</th>
+                    <th style="width:150px">Cliente</th>
+                    <th style="width:200px">Conciliación</th>
+                    <th style="width:100px">Acción</th>
+                </tr></thead>
+                <tbody id="mpPreviewBody"></tbody>
+            </table>
+        </div>
+        <div style="padding:16px;display:flex;gap:8px;">
+            <button class="btn btn-primary" id="btnConfirmMP" onclick="confirmMPImport()">Confirmar Importación</button>
+            <button class="btn btn-secondary" onclick="cancelMPPreview()">Cancelar</button>
+        </div>
     </div>
 </div>
 
@@ -276,31 +305,161 @@ function cancelImport(){pendingMov=[];document.getElementById('previewSection').
 function clearFile(){document.getElementById('fileInput').value='';document.getElementById('fileInfo').style.display='none';document.getElementById('processingMsg').style.display='none';}
 
 // ---- Mercado Pago ----
-async function importMercadoPago() {
+const mpCatsIngreso = <?= json_encode(array_column(array_filter($cats_finanzas, fn($c) => in_array($c['tipo'], ['ingreso','ambos'])), 'nombre')) ?>;
+const mpCatsGasto = <?= json_encode(array_column(array_filter($cats_finanzas, fn($c) => in_array($c['tipo'], ['gasto','ambos'])), 'nombre')) ?>;
+const mpClientes = <?= json_encode($clientes_mp) ?>;
+let mpPendingItems = [];
+
+async function previewMercadoPago() {
     const btn = document.getElementById('btnImportMP');
     const status = document.getElementById('mpStatus');
     btn.disabled = true;
-    btn.textContent = 'Importando...';
+    btn.textContent = 'Consultando...';
     status.style.display = 'block';
     status.innerHTML = '<span style="color:var(--text-muted)">Conectando con Mercado Pago...</span>';
     try {
         const body = new FormData();
-        body.append('action', 'import_mercadopago');
+        body.append('action', 'preview_mercadopago');
         body.append('csrf_token', APP.csrf);
         const raw = await fetch('api/data.php', { method: 'POST', body });
         const res = await raw.json();
         if (res && res.ok) {
-            const d = res.data;
-            status.innerHTML = `<span style="color:var(--success);font-weight:600">${d.imported} movimientos importados</span>` +
-                (d.skipped > 0 ? `<span style="color:var(--text-muted);margin-left:12px">(${d.skipped} omitidos por duplicado o rechazados)</span>` : '');
-            if (d.imported > 0) setTimeout(() => location.reload(), 1500);
+            const movs = res.data.movements;
+            if (movs.length === 0) {
+                status.innerHTML = '<span style="color:var(--success)">Todo sincronizado, no hay movimientos nuevos.</span>';
+            } else {
+                status.style.display = 'none';
+                renderMPPreview(movs);
+            }
         } else {
-            status.innerHTML = `<span style="color:var(--danger)">${(res && res.error) || 'Error al importar'}</span>`;
+            status.innerHTML = `<span style="color:var(--danger)">${(res && res.error) || 'Error al consultar'}</span>`;
         }
     } catch (e) {
-        status.innerHTML = `<span style="color:var(--danger)">Error de conexión: ${e.message}</span>`;
+        status.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
     }
     btn.disabled = false;
     btn.textContent = 'Importar desde Mercado Pago';
+}
+
+function renderMPPreview(movs) {
+    mpPendingItems = movs.map(m => ({
+        ...m,
+        action: m.match_existente ? 'conciliar' : (m.match_factura ? 'conciliar' : 'importar'),
+        categoria: m.categoria_sugerida || '',
+        cliente_id: m.match_factura ? m.match_factura.cliente_id : '',
+        match_id: m.match_existente ? m.match_existente.id : 0,
+        match_factura_id: m.match_factura ? m.match_factura.factura_id : 0,
+    }));
+
+    const preview = document.getElementById('mpPreview');
+    preview.style.display = 'block';
+
+    const matched = mpPendingItems.filter(m => m.match_existente || m.match_factura).length;
+    const autocat = mpPendingItems.filter(m => m.cat_method !== 'pendiente').length;
+    document.getElementById('mpPreviewStats').innerHTML =
+        `<span>Total: <strong>${movs.length}</strong></span>
+         <span style="color:var(--success)">Categorizados: <strong>${autocat}</strong></span>
+         <span style="color:var(--warning)">Pendientes: <strong>${movs.length - autocat}</strong></span>
+         <span style="color:var(--accent)">Con match: <strong>${matched}</strong></span>`;
+
+    const tbody = document.getElementById('mpPreviewBody');
+    tbody.innerHTML = '';
+
+    const clienteOpts = mpClientes.map(c => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
+
+    mpPendingItems.forEach((m, i) => {
+        const cats = m.tipo === 'ingreso' ? mpCatsIngreso : mpCatsGasto;
+        const catOpts = cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+        const color = m.tipo === 'ingreso' ? 'var(--success)' : 'var(--danger)';
+        const sign = m.tipo === 'ingreso' ? '+' : '-';
+
+        // Conciliación info
+        let matchHtml = '<span style="font-size:.75rem;color:var(--text-muted)">Sin match</span>';
+        if (m.match_existente) {
+            const ex = m.match_existente;
+            matchHtml = `<div style="font-size:.75rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--accent);">
+                <strong style="color:var(--accent)">Match encontrado</strong><br>
+                #${ex.id}: ${escHtml(ex.descripcion.substring(0,30))}<br>
+                ${ex.fecha} · ${ex.origen} · ${escHtml(ex.categoria)}
+            </div>`;
+        } else if (m.match_factura) {
+            const fac = m.match_factura;
+            matchHtml = `<div style="font-size:.75rem;background:var(--bg);padding:4px 8px;border-radius:6px;border:1px solid var(--success);">
+                <strong style="color:var(--success)">Factura ${escHtml(fac.numero)}</strong><br>
+                ${escHtml(fac.cliente || 'Sin cliente')} · $${Number(fac.total).toLocaleString('es-CL')}<br>
+                Estado: ${fac.estado}${fac.cxc_estado ? ' · CxC: ' + fac.cxc_estado : ''}
+            </div>`;
+        }
+
+        // Acción selector
+        let actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value">`;
+        actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
+        if (m.match_existente || m.match_factura) {
+            actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
+        }
+        actionHtml += `<option value="skip">Omitir</option></select>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-size:.8rem;white-space:nowrap">${escHtml(m.fecha)}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(m.descripcion)}">
+                ${escHtml(m.descripcion)}
+                <span class="badge ${m.cat_method==='pendiente'?'status-warning':'status-success'}" style="font-size:.6rem;margin-left:4px">${m.cat_method}</span>
+            </td>
+            <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${sign}$${Number(m.monto).toLocaleString('es-CL')}</td>
+            <td><select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].categoria=this.value">
+                <option value="">Sin categoría</option>${catOpts}</select></td>
+            <td><select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
+                <option value="">Sin cliente</option>${clienteOpts}</select></td>
+            <td>${matchHtml}</td>
+            <td>${actionHtml}</td>`;
+
+        // Set selected values
+        const selCat = tr.querySelectorAll('select')[0];
+        if (m.categoria) selCat.value = m.categoria;
+        const selCli = tr.querySelectorAll('select')[1];
+        if (m.cliente_id) selCli.value = m.cliente_id;
+
+        tbody.appendChild(tr);
+    });
+}
+
+async function confirmMPImport() {
+    const btn = document.getElementById('btnConfirmMP');
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+
+    const items = mpPendingItems.map(m => ({
+        mp_id: m.mp_id, action: m.action, tipo: m.tipo,
+        descripcion: m.descripcion, monto: m.monto, fecha: m.fecha,
+        metodo: m.metodo, op_type: m.op_type,
+        categoria: m.categoria, cliente_id: m.cliente_id || '',
+        match_id: m.match_id || 0, match_factura_id: m.match_factura_id || 0,
+    }));
+
+    try {
+        const body = new FormData();
+        body.append('action', 'confirm_mp_import');
+        body.append('csrf_token', APP.csrf);
+        body.append('items', JSON.stringify(items));
+        const raw = await fetch('api/data.php', { method: 'POST', body });
+        const res = await raw.json();
+        if (res && res.ok) {
+            const d = res.data;
+            toast(`${d.imported} importados, ${d.reconciled} conciliados, ${d.skipped} omitidos`);
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            toast((res && res.error) || 'Error al confirmar', 'error');
+        }
+    } catch (e) {
+        toast('Error: ' + e.message, 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Confirmar Importación';
+}
+
+function cancelMPPreview() {
+    mpPendingItems = [];
+    document.getElementById('mpPreview').style.display = 'none';
 }
 </script>
