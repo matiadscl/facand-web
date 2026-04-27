@@ -876,6 +876,63 @@ switch ($action) {
         respond();
         break;
 
+    // ---- CATEGORÍAS EERR ----
+    case 'get_categorias_eerr':
+        $cats = query_all("SELECT * FROM categorias_eerr ORDER BY orden, seccion, categoria, subcategoria");
+        respond($cats ?: []);
+        break;
+
+    case 'create_categoria_eerr':
+        if (!can_edit($user_id, 'categorias') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $seccion = input('seccion');
+        $categoria = input('categoria');
+        $subcategoria = input('subcategoria');
+        $tipo = input('tipo') ?: 'gasto';
+        $orden = input_int('orden') ?: 999;
+        if (!$seccion || !$categoria || !$subcategoria) fail('Sección, categoría y subcategoría son obligatorios');
+        $exists = query_scalar("SELECT COUNT(*) FROM categorias_eerr WHERE seccion = ? AND categoria = ? AND subcategoria = ?", [$seccion, $categoria, $subcategoria]);
+        if ($exists) fail('Esta combinación ya existe');
+        db_execute("INSERT INTO categorias_eerr (seccion, categoria, subcategoria, tipo, orden) VALUES (?, ?, ?, ?, ?)",
+            [$seccion, $categoria, $subcategoria, $tipo, $orden]);
+        log_activity('finance', "Categoría EERR creada: $seccion > $categoria > $subcategoria");
+        respond(['id' => last_id()]);
+        break;
+
+    case 'update_categoria_eerr':
+        if (!can_edit($user_id, 'categorias') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $id = input_int('id');
+        if (!$id) fail('ID obligatorio');
+        $seccion = input('seccion');
+        $categoria = input('categoria');
+        $subcategoria = input('subcategoria');
+        $tipo = input('tipo') ?: 'gasto';
+        $orden = input_int('orden') ?: 999;
+        if (!$seccion || !$categoria || !$subcategoria) fail('Sección, categoría y subcategoría son obligatorios');
+        // Actualizar también los movimientos que usen la categoría anterior
+        $old = query_one("SELECT seccion, categoria, subcategoria FROM categorias_eerr WHERE id = ?", [$id]);
+        if ($old) {
+            db_execute("UPDATE finanzas SET seccion = ?, categoria = ?, subcategoria = ? WHERE seccion = ? AND categoria = ? AND subcategoria = ?",
+                [$seccion, $categoria, $subcategoria, $old['seccion'], $old['categoria'], $old['subcategoria']]);
+        }
+        db_execute("UPDATE categorias_eerr SET seccion = ?, categoria = ?, subcategoria = ?, tipo = ?, orden = ? WHERE id = ?",
+            [$seccion, $categoria, $subcategoria, $tipo, $orden, $id]);
+        log_activity('finance', "Categoría EERR actualizada: $seccion > $categoria > $subcategoria");
+        respond();
+        break;
+
+    case 'delete_categoria_eerr':
+        if (!can_edit($user_id, 'categorias') && !can_edit($user_id, 'finance')) fail('Sin permiso');
+        $id = input_int('id');
+        if (!$id) fail('ID obligatorio');
+        $cat = query_one("SELECT seccion, categoria, subcategoria FROM categorias_eerr WHERE id = ?", [$id]);
+        $in_use = query_scalar("SELECT COUNT(*) FROM finanzas WHERE seccion = ? AND categoria = ? AND subcategoria = ?",
+            [$cat['seccion'] ?? '', $cat['categoria'] ?? '', $cat['subcategoria'] ?? '']);
+        if ($in_use > 0) fail("No se puede eliminar: hay $in_use movimientos usando esta categoría");
+        db_execute("DELETE FROM categorias_eerr WHERE id = ?", [$id]);
+        log_activity('finance', "Categoría EERR eliminada: " . ($cat['seccion'] ?? '') . " > " . ($cat['categoria'] ?? '') . " > " . ($cat['subcategoria'] ?? ''));
+        respond();
+        break;
+
     // ---- MERCADO PAGO ----
 
     // Paso 1: Preview — trae movimientos de MP, sugiere categoría y detecta duplicados

@@ -17,6 +17,7 @@ return [
     'conciliation'=> ['nombre' => 'Conciliación',       'icono' => '&#128256;','archivo' => 'modules/conciliation.php','descripcion' => 'Cruce banco vs facturas y SII',        'parent' => 'finanzas'],
     'results'     => ['nombre' => 'Resultados',          'icono' => '&#128200;','archivo' => 'modules/results.php',    'descripcion' => 'Estado de resultados simplificado',    'parent' => 'finanzas'],
     'budget'      => ['nombre' => 'Presupuesto',         'icono' => '&#128202;','archivo' => 'modules/budget.php',     'descripcion' => 'Presupuesto vs real por categoría',    'parent' => 'finanzas'],
+    'categorias'  => ['nombre' => 'Categorías EERR',    'icono' => '&#128209;','archivo' => 'modules/categorias.php', 'descripcion' => 'Administrar categorías del EERR',      'parent' => 'finanzas'],
     'marketing'   => ['nombre' => 'Marketing',          'icono' => '&#128226;','archivo' => 'modules/marketing.php',   'descripcion' => 'Campañas y métricas'],
     'team'        => ['nombre' => 'Equipo',             'icono' => '&#128100;','archivo' => 'modules/team.php',        'descripcion' => 'Miembros y carga de trabajo'],
     'reports'     => ['nombre' => 'Reportes',           'icono' => '&#128202;','archivo' => 'modules/reports.php',     'descripcion' => 'Reportes exportables'],
