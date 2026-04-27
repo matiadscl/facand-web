@@ -402,9 +402,10 @@ function rebuildMPTable() {
         }
 
         // Acción
-        let actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value">`;
+        let actionHtml = `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].action=this.value;rebuildMPTable()">`;
         actionHtml += `<option value="importar"${m.action==='importar'?' selected':''}>Importar</option>`;
         if (m.match_existente || m.match_factura) actionHtml += `<option value="conciliar"${m.action==='conciliar'?' selected':''}>Conciliar</option>`;
+        if (m.tipo === 'ingreso') actionHtml += `<option value="abono_cc"${m.action==='abono_cc'?' selected':''}>Abono cta cliente</option>`;
         actionHtml += `<option value="skip">Omitir</option></select>`;
 
         // Botón desglosar
@@ -413,8 +414,25 @@ function rebuildMPTable() {
             : `<button class="btn btn-secondary btn-sm" style="font-size:.65rem;margin-top:4px;" onclick="addDesglose(${i})">Desglosar</button>`;
 
         // Fila principal
+        const isAbono = m.action === 'abono_cc';
         const tr = document.createElement('tr');
-        tr.style.cssText = isDesglosado ? 'background:var(--bg);' : '';
+        tr.style.cssText = isDesglosado ? 'background:var(--bg);' : (isAbono ? 'background:rgba(56,189,248,.04);' : '');
+
+        // Columna clasificación: depende del modo
+        let clasificacionHtml;
+        if (isAbono) {
+            clasificacionHtml = '<span style="font-size:.72rem;color:var(--accent);font-weight:600;">Va a cuenta corriente del cliente (no afecta EERR)</span>';
+        } else if (isDesglosado) {
+            clasificacionHtml = '<span style="font-size:.72rem;color:var(--text-muted)">Ver desglose abajo</span>';
+        } else {
+            clasificacionHtml = buildEerrSelectors(i, m);
+        }
+
+        // Cliente: siempre visible (obligatorio en abono_cc)
+        const clienteRequired = isAbono ? ' style="font-size:.75rem;padding:4px 6px;border-color:var(--accent);"' : ' style="font-size:.75rem;padding:4px 6px;"';
+        const clienteHtml = isDesglosado ? '' : `<select class="form-select"${clienteRequired} onchange="mpPendingItems[${i}].cliente_id=this.value">
+                <option value="">${isAbono ? '* Seleccionar cliente' : 'Sin cliente'}</option>${clienteOpts}</select>`;
+
         tr.innerHTML = `
             <td style="font-size:.8rem;white-space:nowrap">${escHtml(m.fecha)}</td>
             <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(m.descripcion)}">
@@ -423,9 +441,8 @@ function rebuildMPTable() {
                 ${isDesglosado ? '<br><span class="badge" style="font-size:.6rem;background:var(--accent);color:#fff;">'+m.desglose.length+' items</span>' : ''}
             </td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${sign}$${Number(m.monto).toLocaleString('es-CL')}</td>
-            <td>${isDesglosado ? '<span style="font-size:.72rem;color:var(--text-muted)">Ver desglose abajo</span>' : buildEerrSelectors(i, m)}</td>
-            <td>${isDesglosado ? '' : `<select class="form-select" style="font-size:.75rem;padding:4px 6px;" onchange="mpPendingItems[${i}].cliente_id=this.value">
-                <option value="">Sin cliente</option>${clienteOpts}</select>`}</td>
+            <td>${clasificacionHtml}</td>
+            <td>${clienteHtml}</td>
             <td>${matchHtml}</td>
             <td>${actionHtml}<br>${desgloseBtn}</td>`;
 
@@ -438,10 +455,19 @@ function rebuildMPTable() {
         // Filas de desglose
         if (isDesglosado) {
             m.desglose.forEach((d, j) => {
+                if (!d.sub_action) d.sub_action = 'importar';
+                const isSubAbono = d.sub_action === 'abono_cc';
                 const subTr = document.createElement('tr');
-                subTr.style.cssText = 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
+                subTr.style.cssText = isSubAbono
+                    ? 'background:rgba(56,189,248,.06);border-left:3px solid var(--accent);'
+                    : 'background:rgba(249,115,22,.03);border-left:3px solid var(--accent);';
                 subTr.innerHTML = `
-                    <td></td>
+                    <td style="font-size:.65rem;">
+                        <select class="form-select" style="font-size:.65rem;padding:2px 4px;" onchange="mpPendingItems[${i}].desglose[${j}].sub_action=this.value;rebuildMPTable()">
+                            <option value="importar"${d.sub_action==='importar'?' selected':''}>EERR</option>
+                            ${m.tipo==='ingreso' ? `<option value="abono_cc"${d.sub_action==='abono_cc'?' selected':''}>Cta cliente</option>` : ''}
+                        </select>
+                    </td>
                     <td style="font-size:.75rem;">
                         <input type="text" class="form-select" style="font-size:.72rem;padding:3px 6px;width:100%;" value="${escHtml(d.descripcion)}"
                             placeholder="Descripción" onchange="mpPendingItems[${i}].desglose[${j}].descripcion=this.value">
@@ -450,10 +476,10 @@ function rebuildMPTable() {
                         <input type="number" class="form-select" style="font-size:.72rem;padding:3px 6px;width:90px;text-align:right;" value="${d.monto}"
                             placeholder="Monto" onchange="updateDesgloseAmount(${i},${j},this.value)">
                     </td>
-                    <td>${buildEerrSelectors(`${i}_${j}`, d, true)}</td>
+                    <td>${isSubAbono ? '<span style="font-size:.7rem;color:var(--accent);">Abono cuenta corriente</span>' : buildEerrSelectors(`${i}_${j}`, d, true)}</td>
                     <td><select class="form-select" style="font-size:.72rem;padding:3px 6px;" onchange="mpPendingItems[${i}].desglose[${j}].cliente_id=this.value">
-                        <option value="">Sin cliente</option>${clienteOpts}</select></td>
-                    <td style="font-size:.7rem;color:var(--text-muted);" id="desgloseBalance_${i}"></td>
+                        <option value="">${isSubAbono ? '* Cliente' : 'Sin cliente'}</option>${clienteOpts}</select></td>
+                    <td style="font-size:.7rem;color:var(--text-muted);"></td>
                     <td><button class="btn btn-secondary btn-sm" style="font-size:.6rem;padding:2px 6px;" onclick="removeDesgloseItem(${i},${j})">x</button></td>`;
                 const selCli = subTr.querySelector('select[onchange*="cliente_id"]');
                 if (selCli && d.cliente_id) selCli.value = d.cliente_id;
@@ -572,8 +598,14 @@ async function confirmMPImport() {
     btn.disabled = true;
     btn.textContent = 'Procesando...';
 
-    // Validar desgloses cuadren
+    // Validaciones
     for (const m of mpPendingItems) {
+        if (m.action === 'abono_cc' && !m.desglose && !m.cliente_id) {
+            toast(`"${m.descripcion}": Abono a cuenta cliente requiere seleccionar un cliente`, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Confirmar Importación';
+            return;
+        }
         if (m.desglose && m.action !== 'skip') {
             const total = m.desglose.reduce((s, d) => s + (parseInt(d.monto) || 0), 0);
             if (total !== m.monto) {
@@ -596,6 +628,7 @@ async function confirmMPImport() {
         };
         if (m.desglose && m.desglose.length > 0) {
             base.desglose = m.desglose.map(d => ({
+                sub_action: d.sub_action || 'importar',
                 descripcion: d.descripcion, monto: parseInt(d.monto) || 0,
                 seccion: d.seccion || '', categoria: d.categoria || '', subcategoria: d.subcategoria || '',
                 cliente_id: d.cliente_id || '',

@@ -1071,9 +1071,22 @@ switch ($action) {
                         $d_monto = (int)($d['monto'] ?? 0);
                         if ($d_monto <= 0) continue;
                         $d_cliente = !empty($d['cliente_id']) ? (int)$d['cliente_id'] : null;
-                        db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
-                            [$tipo, $d['seccion'] ?? '', $d['categoria'] ?? 'general', $d['subcategoria'] ?? '', $d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|method:$method|op:$op_type"]);
-                        $imported++;
+                        $sub_action = $d['sub_action'] ?? 'importar';
+
+                        if ($sub_action === 'abono_cc' && $d_cliente) {
+                            // Sub-item va a cuenta corriente
+                            db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
+                                [$d_cliente, "Abono MP: $d_desc", $d_monto, $fecha]);
+                            // Registro mínimo en finanzas para deduplicación
+                            db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Abono cuenta cliente", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                                [$d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|abono_cc|method:$method"]);
+                            $reconciled++;
+                        } else {
+                            // Sub-item va al EERR
+                            db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                                [$tipo, $d['seccion'] ?? '', $d['categoria'] ?? 'general', $d['subcategoria'] ?? '', $d_desc, $d_monto, $d_cliente, $fecha, $fecha, "mp_id:$mp_id|desglose:" . ($di+1) . "|method:$method|op:$op_type"]);
+                            $imported++;
+                        }
                     }
                 } else {
                     $seccion = $item['seccion'] ?? '';
@@ -1120,6 +1133,37 @@ switch ($action) {
                         [$tipo, $seccion, $categoria, $subcategoria, $desc, $monto, $cliente_id, $fac_id, $fecha, $fecha, "mp_id:$mp_id|conciliado_factura:$fac_id"]);
                     $reconciled++;
                 }
+            } elseif ($action_type === 'abono_cc') {
+                // Abono a cuenta corriente del cliente — NO toca EERR
+                $cliente_id = !empty($item['cliente_id']) ? (int)$item['cliente_id'] : null;
+                if (!$cliente_id) { $skipped++; continue; }
+                $desc = $item['descripcion'] ?? 'Abono Mercado Pago';
+                $monto = (int)($item['monto'] ?? 0);
+                $fecha = $item['fecha'] ?? date('Y-m-d');
+                $method = $item['metodo'] ?? '';
+
+                // Desglose: cada sub-item puede ser abono_cc con distinto cliente
+                $desglose = $item['desglose'] ?? null;
+                if (is_array($desglose) && count($desglose) > 0) {
+                    foreach ($desglose as $di => $d) {
+                        $d_cliente = !empty($d['cliente_id']) ? (int)$d['cliente_id'] : null;
+                        if (!$d_cliente) continue;
+                        $d_monto = (int)($d['monto'] ?? 0);
+                        if ($d_monto <= 0) continue;
+                        $d_desc = $d['descripcion'] ?: $desc;
+                        db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
+                            [$d_cliente, "Abono MP: $d_desc", $d_monto, $fecha]);
+                        $reconciled++;
+                    }
+                } else {
+                    db_execute('INSERT INTO cuenta_corriente (cliente_id, tipo, descripcion, monto, fecha) VALUES (?, "pago", ?, ?, ?)',
+                        [$cliente_id, "Abono MP: $desc", $monto, $fecha]);
+                    $reconciled++;
+                }
+                // Marcar mp_id como procesado (registro mínimo en finanzas para deduplicación)
+                db_execute('INSERT INTO finanzas (tipo, seccion, categoria, subcategoria, descripcion, monto, cliente_id, fecha, fecha_contable, origen, notas, created_at) VALUES ("ingreso", "", "Abono cuenta cliente", "", ?, ?, ?, ?, ?, "mercadopago", ?, datetime("now"))',
+                    [$desc, $monto, $cliente_id, $fecha, $fecha, "mp_id:$mp_id|abono_cc|method:$method"]);
+
             } else {
                 $skipped++;
             }
