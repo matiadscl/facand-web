@@ -263,6 +263,10 @@ function openNewTask() {
         ${formField('asignado_a', 'Asignado a', 'select', '', {options: tEquipoList})}
         ${formField('prioridad', 'Prioridad', 'select', 'media', {options: {critica:'Crítica', alta:'Alta', media:'Media', baja:'Baja'}})}
         ${formField('fecha_limite', 'Fecha Límite', 'date')}
+        <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Descripción</label>
+            <input type="text" name="descripcion" class="form-input" maxlength="100" placeholder="Breve descripción (máx. 100 caracteres)">
+        </div>
     </form>`;
     Modal.open('Nueva Tarea', body,
         `<button class="btn btn-secondary" onclick="Modal.close()">Cancelar</button>
@@ -323,6 +327,10 @@ async function editTask(id) {
         ${formField('estado', 'Estado', 'select', t.estado, {options: {pendiente:'Pendiente', en_progreso:'En Progreso', completada:'Completada', cancelada:'Cancelada'}})}
         ${formField('prioridad', 'Prioridad', 'select', t.prioridad, {options: {critica:'Crítica', alta:'Alta', media:'Media', baja:'Baja'}})}
         ${formField('fecha_limite', 'Fecha Límite', 'date', t.fecha_limite || '')}
+        <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Descripción</label>
+            <input type="text" name="descripcion" class="form-input" value="${escHtml(t.descripcion || '')}" maxlength="100" placeholder="Breve descripción (máx. 100 caracteres)">
+        </div>
     </form>
     <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
         <div style="font-weight:700;font-size:.85rem;margin-bottom:10px;">Historial de Gestiones</div>
